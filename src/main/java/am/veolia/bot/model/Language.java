@@ -3,7 +3,8 @@ package am.veolia.bot.model;
 /** UI language a user has chosen for the bot's own messages (not the outage text itself). */
 public enum Language {
     HY,
-    EN;
+    EN,
+    RU;
 
     public static Language fromCode(String code) {
         if (code == null) {

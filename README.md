@@ -78,10 +78,23 @@ post) are logged as a warning and skipped, never crash the poller.
 
 ### Matching
 
-A user's subscribed keyword matches an announcement if it appears as a
-case-insensitive substring of the district field or any parsed street
-fragment (`KeywordMatcher`). Whitespace and common punctuation differences
-are normalized away before comparing.
+A user's subscribed keyword matches an announcement if it appears (or
+*approximately* appears — see below) as a case-insensitive substring of the
+district field or any parsed street fragment (`KeywordMatcher`). Whitespace
+and common punctuation differences are normalized away before comparing.
+
+Veolia Jur only ever posts in Armenian, but the bot's audience isn't
+Armenian-only, so `/subscribe` accepts a keyword typed in Armenian, English,
+or Russian letters. A Latin/Cyrillic keyword is automatically converted to
+Armenian at subscribe time (`Transliterator`) using a best-effort phonetic
+mapping — Armenian encodes phonetic distinctions (aspirated vs. plain
+consonants, for instance) that Latin/Cyrillic spelling can't unambiguously
+capture, so this is deliberately a heuristic, not an authoritative transform.
+To absorb that slack, matching tolerates up to 2 character edits
+(insert/delete/substitute) once a keyword is 4+ characters long — long enough
+that a couple of stray edits can't turn it into a nonsense match. The bot
+tells the user exactly what Armenian spelling was stored, so they can see
+whether it converted sensibly.
 
 ## Tech stack
 
@@ -106,7 +119,7 @@ am.veolia.bot
 ├── parser       post → structured data (OutageAnnouncementParser, KeywordMatcher)
 ├── repository   SQLite persistence (UserRepository, SubscriptionRepository, ProcessedPostRepository)
 ├── model        domain records (OutageAnnouncement, ChannelPost, Subscription, ...)
-├── i18n         bot UI text in Armenian/English (Messages)
+├── i18n         bot UI text in Armenian/English/Russian (Messages)
 └── config       env-var-driven configuration, DataSource wiring, bot registration
 ```
 
@@ -121,7 +134,7 @@ directly still works exactly the same way; the menu is just a second way in.
 
 | Command | Description |
 |---|---|
-| `/start` | Greets the user and prompts for a UI language (Armenian/English) |
+| `/start` | Greets the user and prompts for a UI language (Armenian/English/Russian) |
 | `/menu` | Re-show the button menu (e.g. if it was dismissed) |
 | `/language` | Change the UI language at any time |
 | `/subscribe <keyword>` | Subscribe to a street or district name |
@@ -300,6 +313,7 @@ trigger a deploy manually from the Actions tab (`workflow_dispatch`).
 ## Out of scope for this version
 
 - No web UI/dashboard — bot-only interaction.
-- No language support beyond Armenian (source content) and English/Armenian
-  (bot UI).
+- No source-language support beyond Armenian — the outage text itself is
+  always forwarded as-is; only the bot's own UI (Armenian/English/Russian)
+  and keyword transliteration are multilingual.
 - No Docker requirement — a plain runnable JAR is sufficient for a droplet.

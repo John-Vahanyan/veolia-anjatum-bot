@@ -5,6 +5,7 @@ import am.veolia.bot.i18n.Messages;
 import am.veolia.bot.model.Language;
 import am.veolia.bot.model.Subscription;
 import am.veolia.bot.model.UserAccount;
+import am.veolia.bot.parser.Transliterator;
 import am.veolia.bot.repository.SubscriptionRepository;
 import am.veolia.bot.repository.UserRepository;
 import org.slf4j.Logger;
@@ -46,6 +47,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
 
     private static final String LANG_CALLBACK_HY = "lang:HY";
     private static final String LANG_CALLBACK_EN = "lang:EN";
+    private static final String LANG_CALLBACK_RU = "lang:RU";
     private static final String UNSUBSCRIBE_CALLBACK_PREFIX = "unsub:";
 
     /** What we're expecting a chat's *next* plain-text message to mean, if anything. */
@@ -100,22 +102,22 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         userRepository.ensureUserExists(chatId);
         Language lang = currentLanguage(chatId);
 
-        if (isMenuButton(text, Messages.MENU_SUBSCRIBE_HY, Messages.MENU_SUBSCRIBE_EN)) {
+        if (isMenuButton(text, Messages.MENU_SUBSCRIBE_HY, Messages.MENU_SUBSCRIBE_EN, Messages.MENU_SUBSCRIBE_RU)) {
             pendingActions.put(chatId, PendingAction.AWAITING_SUBSCRIBE_KEYWORD);
             send(chatId, Messages.askKeywordToSubscribe(lang));
             return;
         }
-        if (isMenuButton(text, Messages.MENU_UNSUBSCRIBE_HY, Messages.MENU_UNSUBSCRIBE_EN)) {
+        if (isMenuButton(text, Messages.MENU_UNSUBSCRIBE_HY, Messages.MENU_UNSUBSCRIBE_EN, Messages.MENU_UNSUBSCRIBE_RU)) {
             pendingActions.remove(chatId);
             offerUnsubscribeChoices(chatId, lang);
             return;
         }
-        if (isMenuButton(text, Messages.MENU_LIST_HY, Messages.MENU_LIST_EN)) {
+        if (isMenuButton(text, Messages.MENU_LIST_HY, Messages.MENU_LIST_EN, Messages.MENU_LIST_RU)) {
             pendingActions.remove(chatId);
             handleList(chatId, lang);
             return;
         }
-        if (isMenuButton(text, Messages.MENU_LANGUAGE_HY, Messages.MENU_LANGUAGE_EN)) {
+        if (isMenuButton(text, Messages.MENU_LANGUAGE_HY, Messages.MENU_LANGUAGE_EN, Messages.MENU_LANGUAGE_RU)) {
             pendingActions.remove(chatId);
             promptLanguage(chatId);
             return;
@@ -173,8 +175,10 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
                 .text("Հայերեն").callbackData(LANG_CALLBACK_HY).build();
         InlineKeyboardButton enButton = InlineKeyboardButton.builder()
                 .text("English").callbackData(LANG_CALLBACK_EN).build();
+        InlineKeyboardButton ruButton = InlineKeyboardButton.builder()
+                .text("Русский").callbackData(LANG_CALLBACK_RU).build();
         InlineKeyboardMarkup markup = InlineKeyboardMarkup.builder()
-                .keyboardRow(List.of(hyButton, enButton))
+                .keyboardRow(List.of(hyButton, enButton, ruButton))
                 .build();
 
         SendMessage sendMessage = SendMessage.builder()
@@ -189,8 +193,13 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         long chatId = callbackQuery.getMessage().getChatId();
         String data = callbackQuery.getData();
 
-        if (LANG_CALLBACK_HY.equals(data) || LANG_CALLBACK_EN.equals(data)) {
-            handleLanguageSelected(chatId, LANG_CALLBACK_EN.equals(data) ? Language.EN : Language.HY);
+        if (LANG_CALLBACK_HY.equals(data) || LANG_CALLBACK_EN.equals(data) || LANG_CALLBACK_RU.equals(data)) {
+            Language selected = switch (data) {
+                case LANG_CALLBACK_EN -> Language.EN;
+                case LANG_CALLBACK_RU -> Language.RU;
+                default -> Language.HY;
+            };
+            handleLanguageSelected(chatId, selected);
         } else if (data != null && data.startsWith(UNSUBSCRIBE_CALLBACK_PREFIX)) {
             handleUnsubscribeSelected(chatId, data.substring(UNSUBSCRIBE_CALLBACK_PREFIX.length()));
         }
@@ -235,16 +244,29 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     }
 
     private void subscribeToKeyword(long chatId, Language lang, String rawKeyword) {
-        String keyword = rawKeyword.trim();
-        if (keyword.isBlank()) {
+        String typed = rawKeyword.trim();
+        if (typed.isBlank()) {
             send(chatId, Messages.subscribeUsage(lang));
             return;
         }
+        // Veolia Jur only ever posts in Armenian, so a Latin/Russian-lettered keyword
+        // would otherwise never match anything — convert it before storing/matching.
+        String keyword = Transliterator.toArmenianBestEffort(typed);
+        boolean wasTransliterated = !keyword.equals(typed);
+
         boolean added = subscriptionRepository.add(chatId, keyword);
         if (added) {
-            log.info("chat {} subscribed to \"{}\"", chatId, keyword);
+            log.info("chat {} subscribed to \"{}\"{}", chatId, keyword,
+                    wasTransliterated ? " (transliterated from \"" + typed + "\")" : "");
         }
-        send(chatId, added ? Messages.subscribed(lang, keyword) : Messages.alreadySubscribed(lang, keyword));
+
+        if (!added) {
+            send(chatId, Messages.alreadySubscribed(lang, keyword));
+        } else if (wasTransliterated) {
+            send(chatId, Messages.subscribedTransliterated(lang, typed, keyword));
+        } else {
+            send(chatId, Messages.subscribed(lang, keyword));
+        }
     }
 
     private void handleUnsubscribe(long chatId, Language lang, String argument) {
@@ -252,7 +274,10 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             send(chatId, Messages.unsubscribeUsage(lang));
             return;
         }
-        String keyword = argument.trim();
+        // Subscriptions are stored in their transliterated Armenian form (see
+        // subscribeToKeyword), so a lookup by the raw typed text needs the same
+        // conversion or it will never find the matching row.
+        String keyword = Transliterator.toArmenianBestEffort(argument.trim());
         boolean removed = subscriptionRepository.remove(chatId, keyword);
         if (removed) {
             log.info("chat {} unsubscribed from \"{}\"", chatId, keyword);
@@ -318,8 +343,13 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
                 .build();
     }
 
-    private boolean isMenuButton(String text, String hyLabel, String enLabel) {
-        return text.equals(hyLabel) || text.equals(enLabel);
+    private boolean isMenuButton(String text, String... labels) {
+        for (String label : labels) {
+            if (text.equals(label)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Language currentLanguage(long chatId) {
