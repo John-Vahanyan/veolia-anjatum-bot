@@ -180,6 +180,24 @@ local development but should always be overridden in production.
 
 ### Steps
 
+0. Install a Java 21 runtime on the droplet if it doesn't have one:
+
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y openjdk-21-jre-headless
+   ```
+
+   If the droplet already runs other projects on an older Java version,
+   installing 21 via `apt` may switch the system-wide `java` default to 21
+   (check with `update-alternatives --list java` / `--config java`, and
+   switch the default back if needed — `update-alternatives --config java`).
+   It doesn't matter either way: [`deploy/veolia-bot.service`](deploy/veolia-bot.service)
+   invokes the JDK 21 binary by its full path
+   (`/usr/lib/jvm/java-21-openjdk-amd64/bin/java`), not the bare `java` command,
+   so this bot is unaffected by — and never changes — whatever the system
+   default `java` is. Adjust that path if your droplet's architecture isn't
+   `amd64` (check with `update-alternatives --list java`).
+
 1. Create the dedicated service + deploy accounts and directories by running
    [`deploy/provision-droplet.sh`](deploy/provision-droplet.sh) as root (see
    "Continuous deployment" below for what the `deploy` account is for):

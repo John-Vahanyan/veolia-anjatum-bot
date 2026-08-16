@@ -13,7 +13,10 @@ Group=veolia-bot
 WorkingDirectory=/opt/veolia-bot
 
 # The JAR is copied here on each deploy (see README "Deployment").
-ExecStart=/usr/bin/java -jar /opt/veolia-bot/veolia-jur-bot.jar
+# Deliberately the full JDK 21 path, NOT the bare `java` on PATH — the droplet
+# also runs other projects on an older Java version via the system default
+# `java` alternative, and this must never depend on (or change) that default.
+ExecStart=/usr/lib/jvm/java-21-openjdk-amd64/bin/java -jar /opt/veolia-bot/veolia-jur-bot.jar
 
 # Secrets/config live in an EnvironmentFile outside the git checkout, e.g.
 # /opt/veolia-bot/veolia-bot.env, containing BOT_TOKEN=..., CHANNEL_USERNAME=...
