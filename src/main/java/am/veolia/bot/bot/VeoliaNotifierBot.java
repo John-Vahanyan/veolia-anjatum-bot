@@ -144,6 +144,9 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         }
         String keyword = argument.trim();
         boolean added = subscriptionRepository.add(chatId, keyword);
+        if (added) {
+            log.info("chat {} subscribed to \"{}\"", chatId, keyword);
+        }
         send(chatId, added ? Messages.subscribed(lang, keyword) : Messages.alreadySubscribed(lang, keyword));
     }
 
@@ -154,6 +157,9 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         }
         String keyword = argument.trim();
         boolean removed = subscriptionRepository.remove(chatId, keyword);
+        if (removed) {
+            log.info("chat {} unsubscribed from \"{}\"", chatId, keyword);
+        }
         send(chatId, removed ? Messages.unsubscribed(lang, keyword) : Messages.notSubscribed(lang, keyword));
     }
 

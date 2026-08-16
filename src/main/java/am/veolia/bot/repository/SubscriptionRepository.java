@@ -26,6 +26,9 @@ public class SubscriptionRepository {
                 "INSERT OR IGNORE INTO subscriptions (user_id, keyword) VALUES (?, ?)",
                 userId, keyword
         );
+        if (rows > 0) {
+            recordEvent(userId, keyword, "SUBSCRIBE");
+        }
         return rows > 0;
     }
 
@@ -35,6 +38,9 @@ public class SubscriptionRepository {
                 "DELETE FROM subscriptions WHERE user_id = ? AND keyword = ?",
                 userId, keyword
         );
+        if (rows > 0) {
+            recordEvent(userId, keyword, "UNSUBSCRIBE");
+        }
         return rows > 0;
     }
 
@@ -49,6 +55,19 @@ public class SubscriptionRepository {
         return jdbcTemplate.query(
                 "SELECT id, user_id, keyword FROM subscriptions",
                 (rs, rowNum) -> new Subscription(rs.getLong("id"), rs.getLong("user_id"), rs.getString("keyword"))
+        );
+    }
+
+    /**
+     * Appends to the permanent {@code subscription_events} audit trail. Unlike
+     * {@code subscriptions} itself, these rows are never deleted — this is what
+     * makes "who subscribed/unsubscribed to what, and when" answerable even
+     * after a keyword has since been removed.
+     */
+    private void recordEvent(long userId, String keyword, String action) {
+        jdbcTemplate.update(
+                "INSERT INTO subscription_events (user_id, keyword, action) VALUES (?, ?, ?)",
+                userId, keyword, action
         );
     }
 }
