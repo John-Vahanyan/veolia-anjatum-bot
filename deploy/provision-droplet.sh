@@ -40,9 +40,19 @@ chmod 600 "/home/$DEPLOY_USER/.ssh/authorized_keys"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh"
 
 echo "==> Restart-only sudo rule for $DEPLOY_USER"
-SYSTEMCTL_BIN=$(command -v systemctl)
+# Cover both /usr/bin/systemctl and /bin/systemctl explicitly: sudoers matches
+# commands as literal strings, and on Debian/Ubuntu one is typically a symlink
+# to the other, but which path a given shell resolves via PATH can differ
+# between an interactive root login (used here) and the non-interactive SSH
+# command GitHub Actions runs — a single resolved path can silently mismatch
+# and fall through to an (impossible, non-interactive) password prompt. The
+# `is-active *` wildcard likewise covers callers that pass extra flags
+# (e.g. `--quiet`), which a fixed-argument rule would otherwise reject.
 cat > /etc/sudoers.d/veolia-bot-deploy <<EOF
-$DEPLOY_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart veolia-bot, $SYSTEMCTL_BIN is-active veolia-bot
+$DEPLOY_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart veolia-bot
+$DEPLOY_USER ALL=(root) NOPASSWD: /bin/systemctl restart veolia-bot
+$DEPLOY_USER ALL=(root) NOPASSWD: /usr/bin/systemctl is-active * veolia-bot
+$DEPLOY_USER ALL=(root) NOPASSWD: /bin/systemctl is-active * veolia-bot
 EOF
 chmod 440 /etc/sudoers.d/veolia-bot-deploy
 visudo -cf /etc/sudoers.d/veolia-bot-deploy
