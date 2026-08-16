@@ -1,0 +1,33 @@
+[Unit]
+Description=Veolia Jur Water Outage Notifier Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=veolia-bot
+Group=veolia-bot
+
+# Deliberately NOT the build checkout — the app's working directory / build
+# output can be rebuilt and wiped on every deploy without touching this.
+WorkingDirectory=/opt/veolia-bot
+
+# The JAR is copied here on each deploy (see README "Deployment").
+ExecStart=/usr/bin/java -jar /opt/veolia-bot/veolia-jur-bot.jar
+
+# Secrets/config live in an EnvironmentFile outside the git checkout, e.g.
+# /opt/veolia-bot/veolia-bot.env, containing BOT_TOKEN=..., CHANNEL_USERNAME=...
+# BOT_DB_PATH=/opt/veolia-bot/data/bot.db, etc. (see .env.example in the repo).
+EnvironmentFile=/opt/veolia-bot/veolia-bot.env
+
+Restart=on-failure
+RestartSec=10
+
+# Hardening (optional but recommended)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/veolia-bot/data
+
+[Install]
+WantedBy=multi-user.target

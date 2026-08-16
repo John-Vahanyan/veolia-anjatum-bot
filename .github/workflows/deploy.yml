@@ -1,0 +1,56 @@
+name: Build, test & deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Never run two deploys at once against the same droplet.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run tests
+        run: mvn -B test
+
+      - name: Package jar
+        run: mvn -B -DskipTests package
+
+      - name: Configure SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Trust the droplet's host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload jar
+        run: |
+          scp target/veolia-jur-bot.jar \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/veolia-bot/veolia-jur-bot.jar.new"
+          # Atomic swap: the running JAR is never left half-written if the upload is interrupted.
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'mv /opt/veolia-bot/veolia-jur-bot.jar.new /opt/veolia-bot/veolia-jur-bot.jar'
+
+      - name: Restart the service
+        run: |
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
+            set -e
+            sudo systemctl restart veolia-bot
+            sleep 2
+            sudo systemctl is-active --quiet veolia-bot
+          '

@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: veolia-jur-bot
+  main:
+    web-application-type: none
+  sql:
+    init:
+      mode: always
+  # Suppress noisy Hikari lifecycle logging for the single-connection SQLite pool.
+  jmx:
+    enabled: false
+
+app:
+  bot:
+    # Provided at deploy time — never commit a real token. See README / .env.example.
+    token: ${BOT_TOKEN:}
+    username: ${BOT_USERNAME:}
+  channel:
+    # Public channel username to poll (without the @ or t.me/ prefix).
+    username: ${CHANNEL_USERNAME:VeoliaJur}
+  polling:
+    # How often (ms) to poll https://t.me/s/<channel>. Default: 90s.
+    interval-ms: ${POLL_INTERVAL_MS:90000}
+    # Small delay before the very first poll, to let the app finish starting up.
+    initial-delay-ms: ${POLL_INITIAL_DELAY_MS:5000}
+  db:
+    # Deliberately defaults OUTSIDE any build/output directory so a rebuild +
+    # redeploy never wipes subscriptions. Override in production, e.g.
+    # BOT_DB_PATH=/opt/veolia-bot/data/bot.db (see README "Deployment").
+    path: ${BOT_DB_PATH:./data/bot.db}
+
+logging:
+  level:
+    root: INFO
+    am.veolia.bot: INFO
+    org.telegram: WARN

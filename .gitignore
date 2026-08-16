@@ -1,0 +1,22 @@
+# Build output
+target/
+build/
+*.class
+
+# SQLite database + local data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+
+# Secrets / local env
+.env
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
