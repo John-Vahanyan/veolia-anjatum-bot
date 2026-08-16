@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class SubscriptionRepository {
@@ -56,6 +57,24 @@ public class SubscriptionRepository {
                 "SELECT id, user_id, keyword FROM subscriptions",
                 (rs, rowNum) -> new Subscription(rs.getLong("id"), rs.getLong("user_id"), rs.getString("keyword"))
         );
+    }
+
+    /** Used to build the "pick a subscription to remove" inline keyboard. */
+    public List<Subscription> findByUserId(long userId) {
+        return jdbcTemplate.query(
+                "SELECT id, user_id, keyword FROM subscriptions WHERE user_id = ? ORDER BY created_at",
+                (rs, rowNum) -> new Subscription(rs.getLong("id"), rs.getLong("user_id"), rs.getString("keyword")),
+                userId
+        );
+    }
+
+    /** Used to resolve which subscription an "unsub:<id>" inline button callback refers to. */
+    public Optional<Subscription> findById(long id) {
+        return jdbcTemplate.query(
+                "SELECT id, user_id, keyword FROM subscriptions WHERE id = ?",
+                (rs, rowNum) -> new Subscription(rs.getLong("id"), rs.getLong("user_id"), rs.getString("keyword")),
+                id
+        ).stream().findFirst();
     }
 
     /**

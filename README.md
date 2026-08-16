@@ -110,20 +110,28 @@ am.veolia.bot
 └── config       env-var-driven configuration, DataSource wiring, bot registration
 ```
 
-## Bot commands
+## Bot commands & menu
+
+Right after choosing a language, users get a persistent button menu (a
+Telegram reply keyboard, always visible above the message box) mirroring
+every action below — tapping **Subscribe** prompts for a keyword as the next
+message; tapping **Unsubscribe** shows an inline button per current
+subscription and removes whichever one is tapped. Typing the commands
+directly still works exactly the same way; the menu is just a second way in.
 
 | Command | Description |
 |---|---|
 | `/start` | Greets the user and prompts for a UI language (Armenian/English) |
+| `/menu` | Re-show the button menu (e.g. if it was dismissed) |
 | `/language` | Change the UI language at any time |
 | `/subscribe <keyword>` | Subscribe to a street or district name |
 | `/unsubscribe <keyword>` | Remove a subscription |
 | `/list` | Show current subscriptions |
 | `/help` | List available commands |
 
-The bot's own messages (greetings, confirmations, help) are shown in your
-chosen language. The forwarded outage announcement text itself is always the
-original Armenian source content — it's never translated.
+The bot's own messages (greetings, confirmations, help, menu labels) are
+shown in your chosen language. The forwarded outage announcement text itself
+is always the original Armenian source content — it's never translated.
 
 ## Configuration
 
