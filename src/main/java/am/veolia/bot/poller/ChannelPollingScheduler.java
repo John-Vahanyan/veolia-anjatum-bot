@@ -126,9 +126,9 @@ public class ChannelPollingScheduler {
                 // happen) — fail closed rather than notifying with no real scope check.
                 return false;
             }
-            return keywordMatcher.matchesScoped(scopeArmenian, subscription.keyword(), announcement);
+            return keywordMatcher.matchesScoped(scopeArmenian, subscription.keyword(), announcement, subscription.fuzzyMatch());
         }
-        return keywordMatcher.matches(subscription.keyword(), announcement);
+        return keywordMatcher.matches(subscription.keyword(), announcement, subscription.fuzzyMatch());
     }
 
     private void notifyUser(long chatId, OutageAnnouncement announcement) {

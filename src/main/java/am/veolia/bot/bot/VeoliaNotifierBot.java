@@ -20,6 +20,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -34,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * The user-facing side of the bot: {@code /start}, {@code /language},
@@ -71,6 +73,8 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     private static final String DISTRICT_CALLBACK_PREFIX = "subd:";
     private static final String DISTRICT_ALL_CALLBACK_PREFIX = "subda:";
     private static final String DISTRICT_STREET_CALLBACK_PREFIX = "subds:";
+    private static final String BACK_TO_REGIONS_CALLBACK = "subback:region";
+    private static final String BACK_TO_DISTRICTS_CALLBACK = "subback:district";
 
     /**
      * What we're expecting a chat's *next* plain-text message to mean: the
@@ -85,6 +89,9 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     private final BotProperties botProperties;
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
+
+    /** Numeric chat id to notify on every new subscription, or {@code null} if disabled — see {@link #notifyAdminOfSubscription}. */
+    private final Long adminChatId;
 
     /**
      * In-memory only, deliberately not persisted: this just tracks "the user
@@ -101,6 +108,20 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         this.botProperties = botProperties;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.adminChatId = parseAdminChatId(botProperties.adminChatId());
+    }
+
+    private static Long parseAdminChatId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException e) {
+            log.warn("app.bot.admin-chat-id (\"{}\") is not a valid numeric chat id; "
+                    + "admin subscribe notifications are disabled", raw);
+            return null;
+        }
     }
 
     @Override
@@ -152,20 +173,20 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
 
         if (text.startsWith("/")) {
             pendingActions.remove(chatId);
-            routeCommand(chatId, lang, text);
+            routeCommand(chatId, lang, text, message.getFrom());
             return;
         }
 
         PendingStreetEntry pending = pendingActions.remove(chatId);
         if (pending != null) {
-            subscribeToScopedStreet(chatId, lang, text, pending.regionCode(), pending.districtCode());
+            subscribeToScopedStreet(chatId, lang, text, pending.regionCode(), pending.districtCode(), message.getFrom());
             return;
         }
 
         send(chatId, Messages.unknownCommand(lang));
     }
 
-    private void routeCommand(long chatId, Language lang, String text) {
+    private void routeCommand(long chatId, Language lang, String text, User from) {
         String command;
         String argument;
         int spaceIdx = text.indexOf(' ');
@@ -186,7 +207,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             case "/start" -> handleStart(chatId);
             case "/menu" -> send(chatId, Messages.menuTitle(lang), buildMainMenu(lang));
             case "/language" -> promptLanguage(chatId);
-            case "/subscribe" -> handleSubscribe(chatId, lang, argument);
+            case "/subscribe" -> handleSubscribe(chatId, lang, argument, from);
             case "/unsubscribe" -> handleUnsubscribe(chatId, lang, argument);
             case "/list" -> handleList(chatId, lang);
             case "/help" -> send(chatId, Messages.help(lang));
@@ -222,6 +243,12 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         String data = callbackQuery.getData();
         Language lang = currentLanguage(chatId);
 
+        // Any inline button tap means the user didn't type the street name we may have been
+        // waiting for — clear it up front so a *later* stray text message can never be
+        // misread as confirming a subscription from an abandoned flow. The two handlers that
+        // actually ask for a street name (below) re-arm this right after.
+        pendingActions.remove(chatId);
+
         if (LANG_CALLBACK_HY.equals(data) || LANG_CALLBACK_EN.equals(data) || LANG_CALLBACK_RU.equals(data)) {
             Language selected = switch (data) {
                 case LANG_CALLBACK_EN -> Language.EN;
@@ -231,14 +258,18 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             handleLanguageSelected(chatId, selected);
         } else if (data != null && data.startsWith(UNSUBSCRIBE_CALLBACK_PREFIX)) {
             handleUnsubscribeSelected(chatId, lang, data.substring(UNSUBSCRIBE_CALLBACK_PREFIX.length()));
+        } else if (BACK_TO_REGIONS_CALLBACK.equals(data)) {
+            sendRegionPicker(chatId, lang);
+        } else if (BACK_TO_DISTRICTS_CALLBACK.equals(data)) {
+            sendDistrictPicker(chatId, lang);
         } else if (data != null && data.startsWith(REGION_ALL_CALLBACK_PREFIX)) {
-            handleWholeRegionPicked(chatId, lang, data.substring(REGION_ALL_CALLBACK_PREFIX.length()));
+            handleWholeRegionPicked(chatId, lang, data.substring(REGION_ALL_CALLBACK_PREFIX.length()), callbackQuery.getFrom());
         } else if (data != null && data.startsWith(REGION_STREET_CALLBACK_PREFIX)) {
             handleRegionStreetPicked(chatId, lang, data.substring(REGION_STREET_CALLBACK_PREFIX.length()));
         } else if (data != null && data.startsWith(REGION_CALLBACK_PREFIX)) {
             handleRegionPicked(chatId, lang, data.substring(REGION_CALLBACK_PREFIX.length()));
         } else if (data != null && data.startsWith(DISTRICT_ALL_CALLBACK_PREFIX)) {
-            handleWholeDistrictPicked(chatId, lang, data.substring(DISTRICT_ALL_CALLBACK_PREFIX.length()));
+            handleWholeDistrictPicked(chatId, lang, data.substring(DISTRICT_ALL_CALLBACK_PREFIX.length()), callbackQuery.getFrom());
         } else if (data != null && data.startsWith(DISTRICT_STREET_CALLBACK_PREFIX)) {
             handleDistrictStreetPicked(chatId, lang, data.substring(DISTRICT_STREET_CALLBACK_PREFIX.length()));
         } else if (data != null && data.startsWith(DISTRICT_CALLBACK_PREFIX)) {
@@ -272,22 +303,30 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             sendDistrictPicker(chatId, lang);
             return;
         }
+        // Already covers every street in this region — offering "whole region" again is a
+        // no-op, and offering "enter a street" would just create a redundant subscription
+        // (the whole-region one already matches it, so the user would be notified twice for
+        // the same announcement). Tell them plainly instead of re-showing the same choice.
+        if (subscriptionRepository.hasWholeScope(chatId, region.name(), "")) {
+            sendAlreadySubscribedWholeScope(chatId, lang, region.displayName(lang), BACK_TO_REGIONS_CALLBACK);
+            return;
+        }
         InlineKeyboardMarkup markup = buildScopeChoiceKeyboard(lang, false,
                 REGION_ALL_CALLBACK_PREFIX + region.name(),
                 REGION_STREET_CALLBACK_PREFIX + region.name());
         send(chatId, Messages.scopeChosenPrompt(lang, region.displayName(lang)), markup);
     }
 
-    private void handleWholeRegionPicked(long chatId, Language lang, String regionCode) {
+    private void handleWholeRegionPicked(long chatId, Language lang, String regionCode, User from) {
         Region region = Region.fromCode(regionCode);
         if (region == null) {
             return;
         }
-        pendingActions.remove(chatId);
         String display = region.displayName(lang);
         boolean added = subscriptionRepository.addWholeScope(chatId, region.armenian(), region.name(), "");
         if (added) {
             log.info("chat {} subscribed to whole region {}", chatId, region.name());
+            notifyAdminOfSubscription(from, display + " — " + Messages.allLabel(Language.EN));
         }
         send(chatId, added ? Messages.subscribedWholeScope(lang, display) : Messages.alreadySubscribedWholeScope(lang, display));
     }
@@ -306,22 +345,30 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         if (district == null) {
             return;
         }
+        // Same reasoning as the region case above: don't re-offer a choice that either does
+        // nothing (whole district again) or creates a redundant, double-notifying subscription
+        // (a street already covered by the existing whole-district one).
+        if (subscriptionRepository.hasWholeScope(chatId, Region.YEREVAN.name(), district.name())) {
+            sendAlreadySubscribedWholeScope(chatId, lang, district.displayName(lang), BACK_TO_DISTRICTS_CALLBACK);
+            return;
+        }
         InlineKeyboardMarkup markup = buildScopeChoiceKeyboard(lang, true,
                 DISTRICT_ALL_CALLBACK_PREFIX + district.name(),
                 DISTRICT_STREET_CALLBACK_PREFIX + district.name());
         send(chatId, Messages.scopeChosenPrompt(lang, district.displayName(lang)), markup);
     }
 
-    private void handleWholeDistrictPicked(long chatId, Language lang, String districtCode) {
+    private void handleWholeDistrictPicked(long chatId, Language lang, String districtCode, User from) {
         District district = District.fromCode(districtCode);
         if (district == null) {
             return;
         }
-        pendingActions.remove(chatId);
         String display = district.displayName(lang);
         boolean added = subscriptionRepository.addWholeScope(chatId, district.armenian(), Region.YEREVAN.name(), district.name());
         if (added) {
             log.info("chat {} subscribed to whole district {}", chatId, district.name());
+            notifyAdminOfSubscription(from,
+                    Region.YEREVAN.displayName(Language.EN) + " — " + display + " — " + Messages.allLabel(Language.EN));
         }
         send(chatId, added ? Messages.subscribedWholeScope(lang, display) : Messages.alreadySubscribedWholeScope(lang, display));
     }
@@ -370,9 +417,34 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         if (!row.isEmpty()) {
             builder.keyboardRow(List.copyOf(row));
         }
+        builder.keyboardRow(List.of(backToRegionsButton(lang)));
         return builder.build();
     }
 
+    private InlineKeyboardButton backToRegionsButton(Language lang) {
+        return InlineKeyboardButton.builder()
+                .text(Messages.buttonGoBack(lang))
+                .callbackData(BACK_TO_REGIONS_CALLBACK)
+                .build();
+    }
+
+    /** Tells the user they already have a "whole area" subscription for this scope, with a single button back to the picker they came from. */
+    private void sendAlreadySubscribedWholeScope(long chatId, Language lang, String scopeDisplayName, String backCallback) {
+        InlineKeyboardButton backButton = InlineKeyboardButton.builder()
+                .text(Messages.buttonGoBack(lang))
+                .callbackData(backCallback)
+                .build();
+        InlineKeyboardMarkup markup = InlineKeyboardMarkup.builder()
+                .keyboardRow(List.of(backButton))
+                .build();
+        send(chatId, Messages.alreadySubscribedWholeScope(lang, scopeDisplayName), markup);
+    }
+
+    /**
+     * The "whole area" / "enter a street" choice, plus a back button. Per how the guided flow
+     * is wired, "back" from here always returns to the region list (not the district list, for
+     * the Yerevan case) — one consistent way out of either 2-button screen.
+     */
     private InlineKeyboardMarkup buildScopeChoiceKeyboard(Language lang, boolean isDistrict,
                                                             String wholeCallback, String streetCallback) {
         InlineKeyboardButton wholeButton = InlineKeyboardButton.builder()
@@ -386,6 +458,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         return InlineKeyboardMarkup.builder()
                 .keyboardRow(List.of(wholeButton))
                 .keyboardRow(List.of(streetButton))
+                .keyboardRow(List.of(backToRegionsButton(lang)))
                 .build();
     }
 
@@ -414,17 +487,17 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     }
 
     /** Legacy typed-command path: {@code /subscribe} with no argument now launches the guided flow instead. */
-    private void handleSubscribe(long chatId, Language lang, String argument) {
+    private void handleSubscribe(long chatId, Language lang, String argument, User from) {
         if (argument.isBlank()) {
             pendingActions.remove(chatId);
             sendRegionPicker(chatId, lang);
             return;
         }
-        subscribeToKeyword(chatId, lang, argument);
+        subscribeToKeyword(chatId, lang, argument, from);
     }
 
     /** Legacy typed-command path: an unscoped keyword, matched against every fragment of an announcement. */
-    private void subscribeToKeyword(long chatId, Language lang, String rawKeyword) {
+    private void subscribeToKeyword(long chatId, Language lang, String rawKeyword, User from) {
         String typed = rawKeyword.trim();
         if (typed.isBlank()) {
             send(chatId, Messages.subscribeUsage(lang));
@@ -435,10 +508,11 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         String keyword = Transliterator.toArmenianBestEffort(typed);
         boolean wasTransliterated = !keyword.equals(typed);
 
-        boolean added = subscriptionRepository.add(chatId, keyword);
+        boolean added = subscriptionRepository.add(chatId, keyword, wasTransliterated);
         if (added) {
             log.info("chat {} subscribed to \"{}\"{}", chatId, keyword,
                     wasTransliterated ? " (transliterated from \"" + typed + "\")" : "");
+            notifyAdminOfSubscription(from, keyword);
         }
 
         if (!added) {
@@ -451,7 +525,8 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     }
 
     /** Guided-flow path: a street name entered after narrowing to a region/district scope. */
-    private void subscribeToScopedStreet(long chatId, Language lang, String rawKeyword, String regionCode, String districtCode) {
+    private void subscribeToScopedStreet(long chatId, Language lang, String rawKeyword, String regionCode,
+                                          String districtCode, User from) {
         String typed = rawKeyword.trim();
         String scopeDisplay = scopeDisplayName(lang, regionCode, districtCode);
         if (typed.isBlank()) {
@@ -461,11 +536,12 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         String keyword = Transliterator.toArmenianBestEffort(typed);
         boolean wasTransliterated = !keyword.equals(typed);
 
-        boolean added = subscriptionRepository.addScopedStreet(chatId, keyword, regionCode, districtCode);
+        boolean added = subscriptionRepository.addScopedStreet(chatId, keyword, regionCode, districtCode, wasTransliterated);
         if (added) {
             log.info("chat {} subscribed to \"{}\" scoped to region={} district={}{}",
                     chatId, keyword, regionCode, districtCode,
                     wasTransliterated ? " (transliterated from \"" + typed + "\")" : "");
+            notifyAdminOfSubscription(from, scopeDisplay + " — " + keyword);
         }
 
         if (!added) {
@@ -594,6 +670,38 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
 
     private Language currentLanguage(long chatId) {
         return userRepository.findByChatId(chatId).map(UserAccount::language).orElse(Language.HY);
+    }
+
+    /**
+     * Notifies {@link #adminChatId} (if configured) that {@code subscriber} just added
+     * {@code subscriptionDescription}. A no-op — cheaply, before doing any formatting — when
+     * no admin chat id is configured, so this is safe to call unconditionally on every
+     * successful subscribe.
+     */
+    private void notifyAdminOfSubscription(User subscriber, String subscriptionDescription) {
+        if (adminChatId == null) {
+            return;
+        }
+        send(adminChatId, "🔔 " + describeUser(subscriber) + " subscribed to: " + subscriptionDescription);
+    }
+
+    /** "First Last (@username, id 123)" — as much of that as Telegram actually gave us. */
+    private static String describeUser(User user) {
+        if (user == null) {
+            return "unknown user";
+        }
+        String name = String.join(" ",
+                        Stream.of(user.getFirstName(), user.getLastName())
+                                .filter(part -> part != null && !part.isBlank())
+                                .toList())
+                .trim();
+        if (name.isBlank()) {
+            name = "id " + user.getId();
+        }
+        String username = user.getUserName();
+        return username != null && !username.isBlank()
+                ? name + " (@" + username + ", id " + user.getId() + ")"
+                : name + " (id " + user.getId() + ")";
     }
 
     /** Sends a plain text message, logging (not throwing) on delivery failure — e.g. a user blocked the bot. */

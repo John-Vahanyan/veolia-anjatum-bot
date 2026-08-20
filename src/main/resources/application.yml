@@ -15,6 +15,10 @@ app:
     # Provided at deploy time — never commit a real token. See README / .env.example.
     token: ${BOT_TOKEN:}
     username: ${BOT_USERNAME:}
+    # Optional: numeric Telegram chat id to notify whenever someone subscribes. Leave unset to
+    # disable. Must be a chat the bot can already message (e.g. the admin has started it) — see
+    # README "Admin subscribe notifications".
+    admin-chat-id: ${ADMIN_CHAT_ID:}
   channel:
     # Public channel username to poll (without the @ or t.me/ prefix).
     username: ${CHANNEL_USERNAME:VeoliaJur}

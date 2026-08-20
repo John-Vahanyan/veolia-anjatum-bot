@@ -280,6 +280,14 @@ public final class Messages {
         return text(lang, "Բոլորը", "All", "Все");
     }
 
+    public static final String BUTTON_GO_BACK_HY = "Ետ ⬅️";
+    public static final String BUTTON_GO_BACK_EN = "Go back ⬅️";
+    public static final String BUTTON_GO_BACK_RU = "Назад ⬅️";
+
+    public static String buttonGoBack(Language lang) {
+        return text(lang, BUTTON_GO_BACK_HY, BUTTON_GO_BACK_EN, BUTTON_GO_BACK_RU);
+    }
+
     /** Shown once a region/district scope is set, asking the user to type the street name. */
     public static String askStreetNameInScope(Language lang, String scopeDisplayName) {
         return text(lang,
@@ -315,13 +323,16 @@ public final class Messages {
         return text(lang,
                 "Դուք բաժանորդագրվեցիք՝ «" + armenian + "» (" + scopeDisplayName + ", փոխադրվեց «" + original + "»-ից)։\n\n"
                         + "Նկատի ունեցեք. «Վեոլիա Ջուր»-ի հայտարարությունները հրապարակվում են միայն "
-                        + "հայերենով, ուստի Ձեր բառը ավտոմատ կերպով փոխադրվեց հայերենի։",
+                        + "հայերենով, ուստի Ձեր բառը ավտոմատ կերպով փոխադրվեց հայերենի։ Համընկնումը "
+                        + "ստուգելիս թույլատրվում է մինչև 2 տառի տարբերություն։",
                 "Subscribed to \"" + armenian + "\" (" + scopeDisplayName + ", converted from \"" + original + "\").\n\n"
                         + "Please note: Veolia Jur only shares announcements in Armenian, so we "
-                        + "automatically converted your word to Armenian.",
+                        + "automatically converted your word to Armenian. We'll allow up to 2 letter "
+                        + "differences when matching it against future posts.",
                 "Вы подписались на «" + armenian + "» (" + scopeDisplayName + ", преобразовано из «" + original + "»).\n\n"
                         + "Обратите внимание: «Veolia Jur» публикует объявления только на армянском "
-                        + "языке, поэтому ваше слово было автоматически преобразовано в армянский.");
+                        + "языке, поэтому ваше слово было автоматически преобразовано в армянский. При "
+                        + "поиске совпадений допускается расхождение до 2 букв.");
     }
 
     public static String alreadySubscribedScopedStreet(Language lang, String scopeDisplayName, String keyword) {

@@ -115,4 +115,42 @@ class KeywordMatcherTest {
 
         assertThat(matcher.matchesScoped("Կոտայք", "8", a)).isTrue();
     }
+
+    @Test
+    void allowFuzzyFalseRejectsAnAlmostMatchingKeyword() {
+        // Same 1st/last-letter-swap as toleratesUpToTwoLetterDifferences_forKeywordsLongEnough,
+        // but with fuzzy tolerance turned off -- meant for a keyword the user typed directly in
+        // Armenian, where there's no transliteration slack to excuse a near-miss.
+        OutageAnnouncement a = announcement("Երևանի Շենգավիթ վարչական շրջանում",
+                List.of("Մանթաշյան 6-12 զույգ համարի շենքերի"));
+
+        assertThat(matcher.matches("Լանթաշյալ", a, false)).isFalse();
+    }
+
+    @Test
+    void allowFuzzyFalseStillAcceptsAnExactMatch() {
+        OutageAnnouncement a = announcement("Երևանի Շենգավիթ վարչական շրջանում",
+                List.of("Մանթաշյան 6-12 զույգ համարի շենքերի"));
+
+        assertThat(matcher.matches("Մանթաշյան", a, false)).isTrue();
+    }
+
+    @Test
+    void matchesScopedWithFuzzyDisabledForTheStreetRejectsAnAlmostMatchingStreet() {
+        OutageAnnouncement a = announcement("Երևանի Շենգավիթ վարչական շրջանում",
+                List.of("Մանթաշյան 6-12 զույգ համարի շենքերի"));
+
+        assertThat(matcher.matchesScoped("Շենգավիթ", "Լանթաշյալ", a, false)).isFalse();
+    }
+
+    @Test
+    void matchesScopedNeverAppliesFuzzyToleranceToTheScopeItselfEvenWhenAllowed() {
+        // The district field says "Շենգավիթ", not the near-miss "Շենգավիլ" -- the scope check
+        // is always exact-contains, regardless of allowFuzzyForStreet, since it's always a
+        // canonical name picked via button, never typed.
+        OutageAnnouncement a = announcement("Երևանի Շենգավիթ վարչական շրջանում",
+                List.of("Մանթաշյան 6-12 զույգ համարի շենքերի"));
+
+        assertThat(matcher.matchesScoped("Շենգավիլ", "Մանթաշյան", a, true)).isFalse();
+    }
 }

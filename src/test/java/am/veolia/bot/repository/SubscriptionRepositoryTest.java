@@ -48,7 +48,7 @@ class SubscriptionRepositoryTest {
 
     @Test
     void addAndFindRoundTripAnUnscopedKeyword() {
-        assertThat(repository.add(1L, "Աբովյան")).isTrue();
+        assertThat(repository.add(1L, "Աբովյան", false)).isTrue();
 
         List<Subscription> found = repository.findByUserId(1L);
         assertThat(found).hasSize(1);
@@ -57,20 +57,28 @@ class SubscriptionRepositoryTest {
         assertThat(subscription.regionCode()).isEmpty();
         assertThat(subscription.districtCode()).isEmpty();
         assertThat(subscription.type()).isEqualTo(SubscriptionType.KEYWORD);
+        assertThat(subscription.fuzzyMatch()).isFalse();
+    }
+
+    @Test
+    void addStoresTheFuzzyMatchFlagAsGiven() {
+        assertThat(repository.add(1L, "Komitas-derived", true)).isTrue();
+
+        assertThat(repository.findByUserId(1L).get(0).fuzzyMatch()).isTrue();
     }
 
     @Test
     void addingTheSameUnscopedKeywordTwiceIsRejected() {
-        assertThat(repository.add(1L, "Աբովյան")).isTrue();
-        assertThat(repository.add(1L, "Աբովյան")).isFalse();
+        assertThat(repository.add(1L, "Աբովյան", false)).isTrue();
+        assertThat(repository.add(1L, "Աբովյան", false)).isFalse();
         assertThat(repository.findByUserId(1L)).hasSize(1);
     }
 
     @Test
     void theSameStreetKeywordCanBeSubscribedInTwoDifferentDistricts() {
         // The whole point of scoping: identical street text, different area, both kept.
-        assertThat(repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON")).isTrue();
-        assertThat(repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "SHENGAVIT")).isTrue();
+        assertThat(repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON", false)).isTrue();
+        assertThat(repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "SHENGAVIT", false)).isTrue();
 
         List<Subscription> found = repository.findByUserId(1L);
         assertThat(found).hasSize(2);
@@ -80,25 +88,53 @@ class SubscriptionRepositoryTest {
 
     @Test
     void addingTheSameScopedStreetTwiceIsRejected() {
-        assertThat(repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON")).isTrue();
-        assertThat(repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON")).isFalse();
+        assertThat(repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON", false)).isTrue();
+        assertThat(repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON", false)).isFalse();
         assertThat(repository.findByUserId(1L)).hasSize(1);
     }
 
     @Test
-    void addWholeScopeStoresTheRegionOrDistrictCodeWithKeywordType() {
+    void addWholeScopeStoresTheRegionOrDistrictCodeWithKeywordTypeAndNoFuzzyTolerance() {
         assertThat(repository.addWholeScope(1L, "Կոտայք", "KOTAYK", "")).isTrue();
 
         Subscription subscription = repository.findByUserId(1L).get(0);
         assertThat(subscription.type()).isEqualTo(SubscriptionType.KEYWORD);
         assertThat(subscription.regionCode()).isEqualTo("KOTAYK");
         assertThat(subscription.districtCode()).isEmpty();
+        assertThat(subscription.fuzzyMatch()).isFalse();
+    }
+
+    @Test
+    void hasWholeScopeIsTrueOnlyAfterAWholeRegionSubscriptionExists() {
+        assertThat(repository.hasWholeScope(1L, "KOTAYK", "")).isFalse();
+
+        repository.addWholeScope(1L, "Կոտայք", "KOTAYK", "");
+
+        assertThat(repository.hasWholeScope(1L, "KOTAYK", "")).isTrue();
+    }
+
+    @Test
+    void hasWholeScopeIsTrueOnlyAfterAWholeDistrictSubscriptionExists() {
+        assertThat(repository.hasWholeScope(1L, "YEREVAN", "KENTRON")).isFalse();
+
+        repository.addWholeScope(1L, "Կենտրոն", "YEREVAN", "KENTRON");
+
+        assertThat(repository.hasWholeScope(1L, "YEREVAN", "KENTRON")).isTrue();
+    }
+
+    @Test
+    void hasWholeScopeIgnoresAScopedStreetSubscriptionInTheSameArea() {
+        // A specific street subscription within a region/district must not be mistaken for
+        // a "whole area" one -- they're deliberately different SubscriptionTypes.
+        repository.addScopedStreet(1L, "Աբովյան", "KOTAYK", "", false);
+
+        assertThat(repository.hasWholeScope(1L, "KOTAYK", "")).isFalse();
     }
 
     @Test
     void removeByIdDeletesOnlyTheTargetedRowEvenWithASharedKeyword() {
-        repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON");
-        repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "SHENGAVIT");
+        repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON", false);
+        repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "SHENGAVIT", false);
         long keepId = repository.findByUserId(1L).stream()
                 .filter(s -> s.districtCode().equals("SHENGAVIT"))
                 .findFirst().orElseThrow().id();
@@ -115,7 +151,7 @@ class SubscriptionRepositoryTest {
 
     @Test
     void removeByIdRefusesToDeleteAnotherUsersSubscription() {
-        repository.add(1L, "Աբովյան");
+        repository.add(1L, "Աբովյան", false);
         long id = repository.findByUserId(1L).get(0).id();
 
         assertThat(repository.removeById(2L, id)).isFalse();
@@ -143,6 +179,7 @@ class SubscriptionRepositoryTest {
                     region_code        TEXT NOT NULL DEFAULT '',
                     district_code      TEXT NOT NULL DEFAULT '',
                     subscription_type  TEXT NOT NULL DEFAULT 'KEYWORD' CHECK (subscription_type IN ('KEYWORD', 'SCOPED_STREET')),
+                    fuzzy_match        INTEGER NOT NULL DEFAULT 1,
                     created_at         TEXT NOT NULL DEFAULT (datetime('now')),
                     UNIQUE (user_id, keyword, region_code, district_code)
                 )""",

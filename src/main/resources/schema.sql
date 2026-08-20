@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     region_code        TEXT NOT NULL DEFAULT '',
     district_code      TEXT NOT NULL DEFAULT '',
     subscription_type  TEXT NOT NULL DEFAULT 'KEYWORD' CHECK (subscription_type IN ('KEYWORD', 'SCOPED_STREET')),
+    -- 1 iff the user typed this keyword in Latin/Cyrillic and it was auto-transliterated
+    -- to Armenian (so it's an approximation, worth 2 letters of matching tolerance); 0 for
+    -- a keyword typed directly in Armenian, or a canonical region/district name from a button.
+    fuzzy_match        INTEGER NOT NULL DEFAULT 1,
     created_at         TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (user_id, keyword, region_code, district_code)
 );

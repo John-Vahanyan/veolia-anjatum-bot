@@ -81,13 +81,20 @@ post) are logged as a warning and skipped, never crash the poller.
 `/subscribe` (and the **Subscribe** menu button) walks the user through a
 guided, button-driven flow rather than asking for free text up front:
 
-1. Pick one of Armenia's 11 regions (`Region`), Yerevan included.
+1. Pick one of Armenia's 11 regions (`Region`), Yerevan included. Every
+   screen from here on has a **Go back** button that returns to this list.
 2. If the region isn't Yerevan: choose **whole region** (notified for every
    outage anywhere in it) or **enter a street name** to narrow further.
    If it *is* Yerevan: pick one of its 12 districts (`District`) first, then
    the same **whole district** / **enter a street name** choice.
 3. A street name typed at that point is *scoped* to the region/district just
    chosen, not just a bare keyword.
+
+Picking a region/district the user is already **whole-area** subscribed to
+skips straight to "you're already subscribed to all outages in X" (plus a
+**Go back** button) instead of re-offering the choice — a street subscription
+underneath an existing whole-area one would just double-notify for the same
+announcement, since matching doesn't dedupe across a user's own subscriptions.
 
 Region and district buttons are shown in the user's UI language, but only
 the Armenian base form (`Region#armenian()` / `District#armenian()`) is ever
@@ -125,11 +132,18 @@ Armenian at subscribe time (`Transliterator`) using a best-effort phonetic
 mapping — Armenian encodes phonetic distinctions (aspirated vs. plain
 consonants, for instance) that Latin/Cyrillic spelling can't unambiguously
 capture, so this is deliberately a heuristic, not an authoritative transform.
-To absorb that slack, matching tolerates up to 2 character edits
-(insert/delete/substitute) once a keyword is 4+ characters long — long enough
-that a couple of stray edits can't turn it into a nonsense match. The bot
-tells the user exactly what Armenian spelling was stored, so they can see
-whether it converted sensibly.
+
+To absorb that slack, matching *can* tolerate up to 2 character edits
+(insert/delete/substitute) once a keyword is 4+ characters long — but only
+for a keyword that actually went through that conversion. Each subscription
+stores whether it was transliterated (`Subscription#fuzzyMatch`), and that's
+the only case fuzzy tolerance is used; a keyword the user typed directly in
+Armenian must match exactly, since there's no transliteration slack to
+excuse a near-miss there — tolerating one would just risk matching an
+unrelated, similarly-spelled street (see `KeywordMatcher`'s
+`allowFuzzy`/`allowFuzzyForStreet` parameters). The bot tells the user
+exactly what Armenian spelling was stored and, when tolerance applies, says
+so explicitly.
 
 ## Tech stack
 
@@ -195,10 +209,31 @@ sensitive is hardcoded.
 |---|---|---|---|
 | `BOT_TOKEN` | **yes** | — | Telegram bot token from [@BotFather](https://t.me/BotFather) |
 | `BOT_USERNAME` | no | — | Your bot's `@username` (only used to strip `/cmd@YourBot` in group chats) |
+| `ADMIN_CHAT_ID` | no | — | Numeric chat id to notify on every new subscription — **see "Admin subscribe notifications" below** |
 | `CHANNEL_USERNAME` | no | `VeoliaJur` | Public channel to poll (no `@`, no `t.me/` prefix) |
 | `POLL_INTERVAL_MS` | no | `90000` | How often to poll the channel |
 | `POLL_INITIAL_DELAY_MS` | no | `5000` | Delay before the first poll after startup |
 | `BOT_DB_PATH` | no | `./data/bot.db` | Path to the SQLite database file — **see "Data durability" below** |
+
+### Admin subscribe notifications
+
+Set `ADMIN_CHAT_ID` to get a message every time anyone subscribes:
+`🔔 Jon Doe (@jondoe, id 123456789) subscribed to: Kentron — Abovyan`. Leave
+it unset (the default) to disable this entirely.
+
+The value is a numeric **chat id**, not a `@username` — Telegram bots can
+only message a chat that has already interacted with them, so this only
+works for a chat id that's pressed `/start` on this bot at least once
+(typically your own). To find yours:
+
+1. Open a chat with this bot (or any bot) and press `/start`.
+2. Message [@userinfobot](https://t.me/userinfobot) on Telegram — it replies
+   with your numeric id.
+3. Set `ADMIN_CHAT_ID` to that number and restart the bot.
+
+An invalid (non-numeric) value is logged as a warning at startup and treated
+as disabled, rather than crashing the bot — unlike `BOT_TOKEN`, this setting
+is optional.
 
 ## Running locally
 

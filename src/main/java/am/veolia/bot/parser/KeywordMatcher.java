@@ -17,13 +17,19 @@ import java.util.regex.Pattern;
  * Latin characters (e.g. a building number suffix), and we collapse
  * whitespace/punctuation so trivial formatting differences don't block a match.
  *
- * <p>Matching is fuzzy (edit-distance-tolerant), not just a plain substring
- * check: keywords that started life as a {@link Transliterator}-converted
- * Latin/Russian street name are, at best, an approximation of the real
- * Armenian spelling — a small amount of drift is expected, not exceptional.
- * An exact substring match is always tried first as a fast path; the fuzzy
- * fallback only kicks in for keywords long enough that a couple of stray
- * edits can't turn them into nonsense matches (see {@link #MIN_LENGTH_FOR_FUZZY}).
+ * <p>Matching can optionally be fuzzy (edit-distance-tolerant) rather than a
+ * plain substring check: a keyword that started life as a
+ * {@link Transliterator}-converted Latin/Russian street name is, at best, an
+ * approximation of the real Armenian spelling, so a small amount of drift is
+ * expected there, not exceptional — but a keyword the user typed directly in
+ * Armenian has no such excuse, and tolerating "close enough" for it only
+ * risks matching an unrelated, similarly-spelled street. So fuzzy tolerance
+ * is an explicit, per-call opt-in ({@code allowFuzzy}); callers pass the
+ * subscription's own record of whether it was transliterated (see
+ * {@code Subscription#fuzzyMatch}). An exact substring match is always tried
+ * first regardless, as a fast path; the fuzzy fallback only kicks in for
+ * keywords long enough that a couple of stray edits can't turn them into
+ * nonsense matches (see {@link #MIN_LENGTH_FOR_FUZZY}).
  */
 @Component
 public class KeywordMatcher {
@@ -44,37 +50,57 @@ public class KeywordMatcher {
     // in a post vs. how a user might type it (commas, dashes, colons, quotes).
     private static final Pattern PUNCTUATION_PATTERN = Pattern.compile("[,.:;«»\"'()]");
 
-    /** True if {@code keyword} approximately matches the district or any street fragment. */
+    /** {@link #matches(String, OutageAnnouncement, boolean)} with fuzzy tolerance allowed. */
     public boolean matches(String keyword, OutageAnnouncement announcement) {
-        return matchesAny(keyword, announcement.matchableFragments());
+        return matches(keyword, announcement, true);
+    }
+
+    /** True if {@code keyword} matches the district or any street fragment, fuzzily iff {@code allowFuzzy}. */
+    public boolean matches(String keyword, OutageAnnouncement announcement, boolean allowFuzzy) {
+        return matchesAny(keyword, announcement.matchableFragments(), allowFuzzy);
+    }
+
+    /** {@link #matchesAny(String, List, boolean)} with fuzzy tolerance allowed. */
+    public boolean matchesAny(String keyword, List<String> fragments) {
+        return matchesAny(keyword, fragments, true);
     }
 
     /**
-     * True if {@code keyword} approximately matches at least one of {@code fragments}. This
-     * is the building block both {@link #matches} (checks every fragment of an announcement)
-     * and scoped matching (checks the district fragment and the street fragments separately)
-     * are built from.
+     * True if {@code keyword} matches at least one of {@code fragments}, fuzzily iff
+     * {@code allowFuzzy}. This is the building block both {@link #matches} (checks every
+     * fragment of an announcement) and scoped matching (checks the district fragment and the
+     * street fragments separately) are built from.
      */
-    public boolean matchesAny(String keyword, List<String> fragments) {
+    public boolean matchesAny(String keyword, List<String> fragments, boolean allowFuzzy) {
         String normalizedKeyword = normalize(keyword);
         if (normalizedKeyword.isEmpty()) {
             return false;
         }
         return fragments.stream()
                 .map(this::normalize)
-                .anyMatch(fragment -> fuzzyContains(fragment, normalizedKeyword));
+                .anyMatch(fragment -> contains(fragment, normalizedKeyword, allowFuzzy));
+    }
+
+    /** {@link #matchesScoped(String, String, OutageAnnouncement, boolean)} with fuzzy tolerance allowed for the street. */
+    public boolean matchesScoped(String scopeArmenianName, String streetKeyword, OutageAnnouncement announcement) {
+        return matchesScoped(scopeArmenianName, streetKeyword, announcement, true);
     }
 
     /**
      * True if the announcement is both in {@code scopeArmenianName}'s region/district (its
-     * district fragment matches) <em>and</em> some street fragment matches {@code streetKeyword}.
-     * Requiring both stops a street subscription from firing on a similarly-spelled street in
-     * a completely different part of the country — the failure mode that plain, unscoped
-     * fuzzy matching had.
+     * district fragment matches) <em>and</em> some street fragment matches {@code streetKeyword}
+     * (fuzzily iff {@code allowFuzzyForStreet}). Requiring both stops a street subscription
+     * from firing on a similarly-spelled street in a completely different part of the country —
+     * the failure mode that plain, unscoped fuzzy matching had.
+     *
+     * <p>The scope check itself is never fuzzy: {@code scopeArmenianName} always comes from the
+     * fixed {@link am.veolia.bot.model.Region}/{@link am.veolia.bot.model.District} list, picked
+     * via button, never typed — there's no transliteration slack to absorb there.
      */
-    public boolean matchesScoped(String scopeArmenianName, String streetKeyword, OutageAnnouncement announcement) {
-        return matchesAny(scopeArmenianName, List.of(announcement.district()))
-                && matchesAny(streetKeyword, announcement.streets());
+    public boolean matchesScoped(String scopeArmenianName, String streetKeyword, OutageAnnouncement announcement,
+                                  boolean allowFuzzyForStreet) {
+        return matchesAny(scopeArmenianName, List.of(announcement.district()), false)
+                && matchesAny(streetKeyword, announcement.streets(), allowFuzzyForStreet);
     }
 
     /** Trims, collapses whitespace, strips common punctuation, and lower-cases for comparison. */
@@ -88,14 +114,14 @@ public class KeywordMatcher {
         return normalized.toLowerCase();
     }
 
-    private boolean fuzzyContains(String text, String pattern) {
+    private boolean contains(String text, String pattern, boolean allowFuzzy) {
         if (pattern.isEmpty()) {
             return false;
         }
         if (text.contains(pattern)) {
             return true;
         }
-        if (pattern.length() < MIN_LENGTH_FOR_FUZZY) {
+        if (!allowFuzzy || pattern.length() < MIN_LENGTH_FOR_FUZZY) {
             return false;
         }
         return approximateSubstringEditDistance(text, pattern) <= MAX_EDITS;

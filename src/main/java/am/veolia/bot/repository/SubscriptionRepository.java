@@ -18,7 +18,8 @@ public class SubscriptionRepository {
             rs.getString("keyword"),
             rs.getString("region_code"),
             rs.getString("district_code"),
-            SubscriptionType.valueOf(rs.getString("subscription_type"))
+            SubscriptionType.valueOf(rs.getString("subscription_type")),
+            rs.getBoolean("fuzzy_match")
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -28,31 +29,34 @@ public class SubscriptionRepository {
     }
 
     /**
-     * Adds a plain, unscoped subscription (legacy free-text {@code /subscribe <keyword>},
-     * or a guided-flow "whole region"/"whole district" choice, where {@code keyword} is
-     * already the region/district's own name). Returns false if the user was already
-     * subscribed to this exact keyword with no scope.
+     * Adds a plain, unscoped subscription (legacy free-text {@code /subscribe <keyword>}).
+     * {@code fuzzyMatch} should be true only if {@code keyword} was auto-transliterated from
+     * Latin/Cyrillic — see {@link Subscription#fuzzyMatch()}. Returns false if the user was
+     * already subscribed to this exact keyword with no scope.
      */
-    public boolean add(long userId, String keyword) {
-        return add(userId, keyword, "", "", SubscriptionType.KEYWORD);
+    public boolean add(long userId, String keyword, boolean fuzzyMatch) {
+        return add(userId, keyword, "", "", SubscriptionType.KEYWORD, fuzzyMatch);
     }
 
     /**
-     * Adds a region/district-scoped street subscription from the guided flow. Returns
-     * false if the user already had this exact keyword subscribed within this same scope.
+     * Adds a region/district-scoped street subscription from the guided flow. {@code fuzzyMatch}
+     * should be true only if {@code keyword} was auto-transliterated from Latin/Cyrillic — see
+     * {@link Subscription#fuzzyMatch()}. Returns false if the user already had this exact
+     * keyword subscribed within this same scope.
      */
-    public boolean addScopedStreet(long userId, String keyword, String regionCode, String districtCode) {
-        return add(userId, keyword, blankToEmpty(regionCode), blankToEmpty(districtCode), SubscriptionType.SCOPED_STREET);
+    public boolean addScopedStreet(long userId, String keyword, String regionCode, String districtCode, boolean fuzzyMatch) {
+        return add(userId, keyword, blankToEmpty(regionCode), blankToEmpty(districtCode), SubscriptionType.SCOPED_STREET, fuzzyMatch);
     }
 
     /**
      * Adds a "whole region"/"whole district" subscription: unscoped matching (the keyword
      * is the region/district's own name, so it's matched like any other keyword), but the
      * scope columns are still recorded so {@code /list} and the unsubscribe menu can show
-     * the user which region/district it refers to.
+     * the user which region/district it refers to. Never fuzzy: the keyword is a canonical
+     * name picked via button, not typed, so there's nothing approximate about it.
      */
     public boolean addWholeScope(long userId, String keyword, String regionCode, String districtCode) {
-        return add(userId, keyword, blankToEmpty(regionCode), blankToEmpty(districtCode), SubscriptionType.KEYWORD);
+        return add(userId, keyword, blankToEmpty(regionCode), blankToEmpty(districtCode), SubscriptionType.KEYWORD, false);
     }
 
     /**
@@ -60,11 +64,12 @@ public class SubscriptionRepository {
      * exception, since generic JDBC drivers like sqlite-jdbc aren't guaranteed to
      * translate cleanly into Spring's {@code DuplicateKeyException}.
      */
-    private boolean add(long userId, String keyword, String regionCode, String districtCode, SubscriptionType type) {
+    private boolean add(long userId, String keyword, String regionCode, String districtCode, SubscriptionType type,
+                         boolean fuzzyMatch) {
         int rows = jdbcTemplate.update(
-                "INSERT OR IGNORE INTO subscriptions (user_id, keyword, region_code, district_code, subscription_type) "
-                        + "VALUES (?, ?, ?, ?, ?)",
-                userId, keyword, regionCode, districtCode, type.name()
+                "INSERT OR IGNORE INTO subscriptions (user_id, keyword, region_code, district_code, subscription_type, fuzzy_match) "
+                        + "VALUES (?, ?, ?, ?, ?, ?)",
+                userId, keyword, regionCode, districtCode, type.name(), fuzzyMatch ? 1 : 0
         );
         if (rows > 0) {
             recordEvent(userId, keyword, "SUBSCRIBE");
@@ -74,6 +79,21 @@ public class SubscriptionRepository {
 
     private static String blankToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    /**
+     * True if the user already has a "whole region"/"whole district" ({@link SubscriptionType#KEYWORD})
+     * subscription for this exact scope. Used by the guided flow to short-circuit re-offering
+     * "whole area"/"enter a street" once that area is already fully covered — a street
+     * subscription underneath an existing whole-area one would just double-notify.
+     */
+    public boolean hasWholeScope(long userId, String regionCode, String districtCode) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM subscriptions WHERE user_id = ? AND region_code = ? AND district_code = ? "
+                        + "AND subscription_type = 'KEYWORD'",
+                Integer.class, userId, blankToEmpty(regionCode), blankToEmpty(districtCode)
+        );
+        return count != null && count > 0;
     }
 
     /** Returns false if no matching unscoped subscription existed to remove. Used by the typed {@code /unsubscribe <keyword>} command. */
@@ -103,7 +123,7 @@ public class SubscriptionRepository {
 
     public List<Subscription> findAll() {
         return jdbcTemplate.query(
-                "SELECT id, user_id, keyword, region_code, district_code, subscription_type FROM subscriptions",
+                "SELECT id, user_id, keyword, region_code, district_code, subscription_type, fuzzy_match FROM subscriptions",
                 SUBSCRIPTION_ROW_MAPPER
         );
     }
@@ -111,7 +131,7 @@ public class SubscriptionRepository {
     /** Used to build the "pick a subscription to remove" inline keyboard, and the /list view. */
     public List<Subscription> findByUserId(long userId) {
         return jdbcTemplate.query(
-                "SELECT id, user_id, keyword, region_code, district_code, subscription_type "
+                "SELECT id, user_id, keyword, region_code, district_code, subscription_type, fuzzy_match "
                         + "FROM subscriptions WHERE user_id = ? ORDER BY created_at",
                 SUBSCRIPTION_ROW_MAPPER,
                 userId
@@ -121,7 +141,7 @@ public class SubscriptionRepository {
     /** Used to resolve which subscription an "unsub:<id>" inline button callback refers to. */
     public Optional<Subscription> findById(long id) {
         return jdbcTemplate.query(
-                "SELECT id, user_id, keyword, region_code, district_code, subscription_type FROM subscriptions WHERE id = ?",
+                "SELECT id, user_id, keyword, region_code, district_code, subscription_type, fuzzy_match FROM subscriptions WHERE id = ?",
                 SUBSCRIPTION_ROW_MAPPER,
                 id
         ).stream().findFirst();
