@@ -280,7 +280,7 @@ public final class Messages {
         return text(lang, "Բոլորը", "All", "Все");
     }
 
-    public static final String BUTTON_GO_BACK_HY = "Ետ ⬅️";
+    public static final String BUTTON_GO_BACK_HY = "Հետ ⬅️";
     public static final String BUTTON_GO_BACK_EN = "Go back ⬅️";
     public static final String BUTTON_GO_BACK_RU = "Назад ⬅️";
 
