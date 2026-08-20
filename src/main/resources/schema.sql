@@ -8,12 +8,19 @@ CREATE TABLE IF NOT EXISTS users (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- region_code/district_code are non-null (default '') rather than nullable so
+-- the UNIQUE constraint below treats "no scope" consistently across rows —
+-- SQLite (like standard SQL) treats every NULL as distinct from every other
+-- NULL, which would silently defeat de-duplication for unscoped keywords.
 CREATE TABLE IF NOT EXISTS subscriptions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id     INTEGER NOT NULL REFERENCES users (chat_id),
-    keyword     TEXT NOT NULL,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (user_id, keyword)
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id            INTEGER NOT NULL REFERENCES users (chat_id),
+    keyword            TEXT NOT NULL,
+    region_code        TEXT NOT NULL DEFAULT '',
+    district_code      TEXT NOT NULL DEFAULT '',
+    subscription_type  TEXT NOT NULL DEFAULT 'KEYWORD' CHECK (subscription_type IN ('KEYWORD', 'SCOPED_STREET')),
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (user_id, keyword, region_code, district_code)
 );
 
 CREATE TABLE IF NOT EXISTS processed_posts (

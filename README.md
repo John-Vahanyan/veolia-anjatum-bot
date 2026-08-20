@@ -76,16 +76,51 @@ The parser (`OutageAnnouncementParser`) extracts:
 Posts that don't match the expected structure (e.g. an unrelated channel
 post) are logged as a warning and skipped, never crash the poller.
 
+### Subscribing: region → district → street
+
+`/subscribe` (and the **Subscribe** menu button) walks the user through a
+guided, button-driven flow rather than asking for free text up front:
+
+1. Pick one of Armenia's 11 regions (`Region`), Yerevan included.
+2. If the region isn't Yerevan: choose **whole region** (notified for every
+   outage anywhere in it) or **enter a street name** to narrow further.
+   If it *is* Yerevan: pick one of its 12 districts (`District`) first, then
+   the same **whole district** / **enter a street name** choice.
+3. A street name typed at that point is *scoped* to the region/district just
+   chosen, not just a bare keyword.
+
+Region and district buttons are shown in the user's UI language, but only
+the Armenian base form (`Region#armenian()` / `District#armenian()`) is ever
+compared against post text — Veolia Jur posts exclusively in Armenian, and
+every post's title names its area that way (`"<Region>ի մարզի ..."` /
+`"Երևանի <District> վարչական շրջանում"`), so a plain substring check is
+enough for the scope itself, no fuzzy tolerance needed.
+
+The typed-command form still works too: `/subscribe <keyword>` subscribes
+to an unscoped keyword directly, matched the old way (see below) — mainly
+useful for power users who already know exactly what to type.
+
 ### Matching
 
-A user's subscribed keyword matches an announcement if it appears (or
-*approximately* appears — see below) as a case-insensitive substring of the
-district field or any parsed street fragment (`KeywordMatcher`). Whitespace
-and common punctuation differences are normalized away before comparing.
+An **unscoped** keyword (the legacy `/subscribe <keyword>` form, or a
+"whole region"/"whole district" guided-flow choice) matches an announcement
+if it appears (or *approximately* appears — see below) as a case-insensitive
+substring of the district field or any parsed street fragment
+(`KeywordMatcher#matches`). Whitespace and common punctuation differences
+are normalized away before comparing.
+
+A **scoped street** subscription (the guided flow's "enter a street name"
+choice) requires *both* halves to match (`KeywordMatcher#matchesScoped`):
+the announcement's district fragment must match the chosen region/district,
+*and* one of its street fragments must match the typed street name. This is
+what stops a street subscription from firing on a similarly-spelled street
+in a completely different part of the country — the original failure mode
+that motivated adding scoping, where a plain keyword with 2-edit fuzzy
+tolerance could match all sorts of unrelated streets nationwide.
 
 Veolia Jur only ever posts in Armenian, but the bot's audience isn't
-Armenian-only, so `/subscribe` accepts a keyword typed in Armenian, English,
-or Russian letters. A Latin/Cyrillic keyword is automatically converted to
+Armenian-only, so a street name can be typed in Armenian, English, or
+Russian letters. A Latin/Cyrillic keyword is automatically converted to
 Armenian at subscribe time (`Transliterator`) using a best-effort phonetic
 mapping — Armenian encodes phonetic distinctions (aspirated vs. plain
 consonants, for instance) that Latin/Cyrillic spelling can't unambiguously
@@ -107,7 +142,10 @@ whether it converted sensibly.
   no separate DB server, deployment is a single JAR + a `.db` file
 - Schema managed by a single idempotent `schema.sql` run on every startup
   (`spring.sql.init.mode=always`) — no migration framework needed for a
-  schema this small
+  schema this small. The one exception is `SubscriptionSchemaMigration`, a
+  small hand-written `ApplicationRunner` that rebuilds the `subscriptions`
+  table in place the first time it finds the pre-scoping shape (SQLite can't
+  retrofit new columns/constraints onto an existing table via plain DDL).
 - JUnit 5 + AssertJ for tests
 
 ## Project layout
@@ -118,7 +156,7 @@ am.veolia.bot
 ├── poller       scheduled channel fetching (ChannelHtmlFetcher, ChannelPollingScheduler)
 ├── parser       post → structured data (OutageAnnouncementParser, KeywordMatcher)
 ├── repository   SQLite persistence (UserRepository, SubscriptionRepository, ProcessedPostRepository)
-├── model        domain records (OutageAnnouncement, ChannelPost, Subscription, ...)
+├── model        domain records (OutageAnnouncement, ChannelPost, Subscription, Region, District, ...)
 ├── i18n         bot UI text in Armenian/English/Russian (Messages)
 └── config       env-var-driven configuration, DataSource wiring, bot registration
 ```
@@ -127,10 +165,12 @@ am.veolia.bot
 
 Right after choosing a language, users get a persistent button menu (a
 Telegram reply keyboard, always visible above the message box) mirroring
-every action below — tapping **Subscribe** prompts for a keyword as the next
-message; tapping **Unsubscribe** shows an inline button per current
-subscription and removes whichever one is tapped. Typing the commands
-directly still works exactly the same way; the menu is just a second way in.
+every action below — tapping **Subscribe** launches the guided
+region → district → street flow described above; tapping **Unsubscribe**
+shows an inline button per current subscription (labeled with its
+region/district scope, if any) and removes whichever one is tapped. Typing
+the commands directly still works the same way; the menu is just a second
+way in.
 
 | Command | Description |
 |---|---|

@@ -4,6 +4,7 @@ import am.veolia.bot.model.OutageAnnouncement;
 import org.springframework.stereotype.Component;
 
 import java.text.Normalizer;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -45,13 +46,35 @@ public class KeywordMatcher {
 
     /** True if {@code keyword} approximately matches the district or any street fragment. */
     public boolean matches(String keyword, OutageAnnouncement announcement) {
+        return matchesAny(keyword, announcement.matchableFragments());
+    }
+
+    /**
+     * True if {@code keyword} approximately matches at least one of {@code fragments}. This
+     * is the building block both {@link #matches} (checks every fragment of an announcement)
+     * and scoped matching (checks the district fragment and the street fragments separately)
+     * are built from.
+     */
+    public boolean matchesAny(String keyword, List<String> fragments) {
         String normalizedKeyword = normalize(keyword);
         if (normalizedKeyword.isEmpty()) {
             return false;
         }
-        return announcement.matchableFragments().stream()
+        return fragments.stream()
                 .map(this::normalize)
                 .anyMatch(fragment -> fuzzyContains(fragment, normalizedKeyword));
+    }
+
+    /**
+     * True if the announcement is both in {@code scopeArmenianName}'s region/district (its
+     * district fragment matches) <em>and</em> some street fragment matches {@code streetKeyword}.
+     * Requiring both stops a street subscription from firing on a similarly-spelled street in
+     * a completely different part of the country — the failure mode that plain, unscoped
+     * fuzzy matching had.
+     */
+    public boolean matchesScoped(String scopeArmenianName, String streetKeyword, OutageAnnouncement announcement) {
+        return matchesAny(scopeArmenianName, List.of(announcement.district()))
+                && matchesAny(streetKeyword, announcement.streets());
     }
 
     /** Trims, collapses whitespace, strips common punctuation, and lower-cases for comparison. */

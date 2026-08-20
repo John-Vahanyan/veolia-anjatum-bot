@@ -80,4 +80,39 @@ class KeywordMatcherTest {
         // fuzzy-matching floor, so it must be rejected instead of matching almost anything short.
         assertThat(matcher.matches("բոգ", a)).isFalse();
     }
+
+    @Test
+    void scopedMatchRequiresBothTheScopeAndTheStreetToMatch() {
+        OutageAnnouncement a = announcement("Երևանի Շենգավիթ վարչական շրջանում",
+                List.of("Մանթաշյան 6-12 զույգ համարի շենքերի"));
+
+        assertThat(matcher.matchesScoped("Շենգավիթ", "Մանթաշյան", a)).isTrue();
+    }
+
+    @Test
+    void scopedMatchRejectsAMatchingStreetInTheWrongDistrict() {
+        // Same street name, but the announcement is for a different district than the one
+        // the user scoped their subscription to -- this is exactly the false-positive the
+        // guided region/district flow exists to prevent.
+        OutageAnnouncement a = announcement("Երևանի Կենտրոն վարչական շրջանում",
+                List.of("Մանթաշյան 6-12 զույգ համարի շենքերի"));
+
+        assertThat(matcher.matchesScoped("Շենգավիթ", "Մանթաշյան", a)).isFalse();
+    }
+
+    @Test
+    void scopedMatchRejectsTheRightDistrictWithAnUnrelatedStreet() {
+        OutageAnnouncement a = announcement("Երևանի Շենգավիթ վարչական շրջանում",
+                List.of("Մանթաշյան 6-12 զույգ համարի շենքերի"));
+
+        assertThat(matcher.matchesScoped("Շենգավիթ", "Կոմիտաս", a)).isFalse();
+    }
+
+    @Test
+    void matchesScopedAcceptsARegionScopeAgainstTheDistrictField() {
+        OutageAnnouncement a = announcement("Կոտայքի մարզի Բլահովիտ գյուղում",
+                List.of("1", "8", "9 փողոցների"));
+
+        assertThat(matcher.matchesScoped("Կոտայք", "8", a)).isTrue();
+    }
 }

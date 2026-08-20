@@ -6,6 +6,7 @@ import am.veolia.bot.model.ChannelPost;
 import am.veolia.bot.model.Language;
 import am.veolia.bot.model.OutageAnnouncement;
 import am.veolia.bot.model.Subscription;
+import am.veolia.bot.model.SubscriptionType;
 import am.veolia.bot.model.UserAccount;
 import am.veolia.bot.parser.KeywordMatcher;
 import am.veolia.bot.parser.OutageAnnouncementParser;
@@ -98,7 +99,7 @@ public class ChannelPollingScheduler {
         List<Subscription> subscriptions = subscriptionRepository.findAll();
         int notified = 0;
         for (Subscription subscription : subscriptions) {
-            if (keywordMatcher.matches(subscription.keyword(), announcement)) {
+            if (matches(subscription, announcement)) {
                 notifyUser(subscription.userId(), announcement);
                 notified++;
             }
@@ -107,6 +108,27 @@ public class ChannelPollingScheduler {
                 post.postId(), announcement.streets().size(), notified);
 
         processedPostRepository.markProcessed(post.postId());
+    }
+
+    /**
+     * A {@link am.veolia.bot.model.SubscriptionType#SCOPED_STREET} subscription must match
+     * both its region/district scope and its street keyword; everything else (legacy
+     * free-text subscriptions, and the guided flow's "whole region"/"whole district" choices)
+     * is a plain keyword match against every fragment, same as before scoping existed.
+     */
+    private boolean matches(Subscription subscription, OutageAnnouncement announcement) {
+        if (subscription.type() == SubscriptionType.SCOPED_STREET) {
+            String scopeArmenian = subscription.district() != null
+                    ? subscription.district().armenian()
+                    : subscription.region() != null ? subscription.region().armenian() : null;
+            if (scopeArmenian == null) {
+                // Scope code doesn't resolve to a known region/district (shouldn't normally
+                // happen) — fail closed rather than notifying with no real scope check.
+                return false;
+            }
+            return keywordMatcher.matchesScoped(scopeArmenian, subscription.keyword(), announcement);
+        }
+        return keywordMatcher.matches(subscription.keyword(), announcement);
     }
 
     private void notifyUser(long chatId, OutageAnnouncement announcement) {

@@ -231,6 +231,106 @@ public final class Messages {
                 "Напишите название улицы или района, на которое хотите подписаться.");
     }
 
+    public static String chooseRegionPrompt(Language lang) {
+        return text(lang,
+                "Ընտրեք մարզը, որի ջրանջատումների մասին ցանկանում եք տեղեկանալ.",
+                "Choose the region you want outage notifications for:",
+                "Выберите регион, о котором хотите получать уведомления:");
+    }
+
+    public static String chooseDistrictPrompt(Language lang) {
+        return text(lang,
+                "Ընտրեք Երևանի վարչական շրջանը.",
+                "Choose a district of Yerevan:",
+                "Выберите административный район Еревана:");
+    }
+
+    /** Shown after a region/district is picked, right above the "whole area" / "specific street" buttons. */
+    public static String scopeChosenPrompt(Language lang, String scopeDisplayName) {
+        return text(lang,
+                "Ընտրվեց՝ «" + scopeDisplayName + "»։ Ի՞նչ եք ցանկանում.",
+                "You picked \"" + scopeDisplayName + "\". What would you like?",
+                "Вы выбрали «" + scopeDisplayName + "». Что вы хотите?");
+    }
+
+    public static final String BUTTON_WHOLE_REGION_HY = "Ամբողջ մարզը ✅";
+    public static final String BUTTON_WHOLE_REGION_EN = "Whole region ✅";
+    public static final String BUTTON_WHOLE_REGION_RU = "Весь регион ✅";
+    public static final String BUTTON_WHOLE_DISTRICT_HY = "Ամբողջ թաղամասը ✅";
+    public static final String BUTTON_WHOLE_DISTRICT_EN = "Whole district ✅";
+    public static final String BUTTON_WHOLE_DISTRICT_RU = "Весь район ✅";
+    public static final String BUTTON_ENTER_STREET_HY = "Նշել փողոցի անվանումը ✍️";
+    public static final String BUTTON_ENTER_STREET_EN = "Enter street name ✍️";
+    public static final String BUTTON_ENTER_STREET_RU = "Указать название улицы ✍️";
+
+    public static String buttonWholeRegion(Language lang) {
+        return text(lang, BUTTON_WHOLE_REGION_HY, BUTTON_WHOLE_REGION_EN, BUTTON_WHOLE_REGION_RU);
+    }
+
+    public static String buttonWholeDistrict(Language lang) {
+        return text(lang, BUTTON_WHOLE_DISTRICT_HY, BUTTON_WHOLE_DISTRICT_EN, BUTTON_WHOLE_DISTRICT_RU);
+    }
+
+    public static String buttonEnterStreet(Language lang) {
+        return text(lang, BUTTON_ENTER_STREET_HY, BUTTON_ENTER_STREET_EN, BUTTON_ENTER_STREET_RU);
+    }
+
+    /** The last segment of a "whole region/district" subscription's display label — see VeoliaNotifierBot#describeSubscription. */
+    public static String allLabel(Language lang) {
+        return text(lang, "Բոլորը", "All", "Все");
+    }
+
+    /** Shown once a region/district scope is set, asking the user to type the street name. */
+    public static String askStreetNameInScope(Language lang, String scopeDisplayName) {
+        return text(lang,
+                "Գրեք փողոցի անվանումը (" + scopeDisplayName + ")։",
+                "Send me the street name (in " + scopeDisplayName + ").",
+                "Напишите название улицы (в «" + scopeDisplayName + "»).");
+    }
+
+    public static String subscribedWholeScope(Language lang, String scopeDisplayName) {
+        return text(lang,
+                "Դուք բաժանորդագրվեցիք «" + scopeDisplayName + "»-ի բոլոր ջրանջատումներին։",
+                "Subscribed to all outages in \"" + scopeDisplayName + "\".",
+                "Вы подписались на все отключения в «" + scopeDisplayName + "».");
+    }
+
+    public static String alreadySubscribedWholeScope(Language lang, String scopeDisplayName) {
+        return text(lang,
+                "Դուք արդեն բաժանորդագրված եք «" + scopeDisplayName + "»-ի բոլոր ջրանջատումներին։",
+                "You're already subscribed to all outages in \"" + scopeDisplayName + "\".",
+                "Вы уже подписаны на все отключения в «" + scopeDisplayName + "».");
+    }
+
+    public static String subscribedScopedStreet(Language lang, String scopeDisplayName, String keyword) {
+        return text(lang,
+                "Դուք բաժանորդագրվեցիք՝ «" + keyword + "» (" + scopeDisplayName + ")։",
+                "Subscribed to \"" + keyword + "\" (" + scopeDisplayName + ").",
+                "Вы подписались на «" + keyword + "» (" + scopeDisplayName + ").");
+    }
+
+    /** Used when the stored keyword differs from what the user typed (transliterated to Armenian). */
+    public static String subscribedScopedStreetTransliterated(Language lang, String scopeDisplayName,
+                                                                String original, String armenian) {
+        return text(lang,
+                "Դուք բաժանորդագրվեցիք՝ «" + armenian + "» (" + scopeDisplayName + ", փոխադրվեց «" + original + "»-ից)։\n\n"
+                        + "Նկատի ունեցեք. «Վեոլիա Ջուր»-ի հայտարարությունները հրապարակվում են միայն "
+                        + "հայերենով, ուստի Ձեր բառը ավտոմատ կերպով փոխադրվեց հայերենի։",
+                "Subscribed to \"" + armenian + "\" (" + scopeDisplayName + ", converted from \"" + original + "\").\n\n"
+                        + "Please note: Veolia Jur only shares announcements in Armenian, so we "
+                        + "automatically converted your word to Armenian.",
+                "Вы подписались на «" + armenian + "» (" + scopeDisplayName + ", преобразовано из «" + original + "»).\n\n"
+                        + "Обратите внимание: «Veolia Jur» публикует объявления только на армянском "
+                        + "языке, поэтому ваше слово было автоматически преобразовано в армянский.");
+    }
+
+    public static String alreadySubscribedScopedStreet(Language lang, String scopeDisplayName, String keyword) {
+        return text(lang,
+                "Դուք արդեն բաժանորդագրված եք՝ «" + keyword + "» (" + scopeDisplayName + ")։",
+                "You're already subscribed to \"" + keyword + "\" (" + scopeDisplayName + ").",
+                "Вы уже подписаны на «" + keyword + "» (" + scopeDisplayName + ").");
+    }
+
     public static String chooseKeywordToUnsubscribe(Language lang) {
         return text(lang,
                 "Ընտրեք, թե որ բաժանորդագրությունը ցանկանում եք չեղարկել.",
