@@ -121,6 +121,28 @@ public class SubscriptionRepository {
         return rows > 0;
     }
 
+    /** Every distinct user id with at least one subscription — used to sweep all subscribers for a one-off notice/migration. */
+    public List<Long> findDistinctUserIdsWithSubscriptions() {
+        return jdbcTemplate.queryForList("SELECT DISTINCT user_id FROM subscriptions", Long.class);
+    }
+
+    /**
+     * Removes every subscription a user has in one shot, recording one {@code UNSUBSCRIBE} audit
+     * event per keyword removed (same as removing them one at a time would). Returns how many
+     * were removed. Used by one-off maintenance tasks, not by any normal user-facing flow.
+     */
+    public int removeAllForUser(long userId) {
+        List<Subscription> existing = findByUserId(userId);
+        if (existing.isEmpty()) {
+            return 0;
+        }
+        int rows = jdbcTemplate.update("DELETE FROM subscriptions WHERE user_id = ?", userId);
+        for (Subscription subscription : existing) {
+            recordEvent(userId, subscription.keyword(), "UNSUBSCRIBE");
+        }
+        return rows;
+    }
+
     public List<Subscription> findAll() {
         return jdbcTemplate.query(
                 "SELECT id, user_id, keyword, region_code, district_code, subscription_type, fuzzy_match FROM subscriptions",

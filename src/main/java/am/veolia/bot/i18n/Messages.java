@@ -349,6 +349,35 @@ public final class Messages {
                 "Выберите, какую подписку удалить:");
     }
 
+    /**
+     * One-off notice sent by {@code MigrationNoticeRunner} to every subscriber when their
+     * old subscriptions are wiped as part of a matching-engine upgrade, telling them to
+     * re-subscribe with the new guided flow.
+     */
+    public static String migrationNoticeResubscribe(Language lang) {
+        return text(lang,
+                """
+                🔄 Բոտը թարմացվել է, և Ձեր նախորդ բաժանորդագրությունները ջնջվել են՝ նոր, ավելի ճշգրիտ \
+                տարբերակին անցնելու համար։
+
+                Խնդրում ենք նորից բաժանորդագրվել՝ օգտվելով նոր համակարգից (մարզ → թաղամաս → փողոց), \
+                որն ավելի ստույգ արդյունքներ է տալիս։ Սեղմեք /subscribe կամ ներքևի «Բաժանորդագրվել» \
+                կոճակը՝ սկսելու համար։""",
+                """
+                🔄 The bot has been updated, and your previous subscriptions were removed as part of a \
+                switch to a new, more accurate matching engine.
+
+                Please subscribe again using the new guided system (region → district → street) for \
+                better results. Tap /subscribe or the "Subscribe" button below to get started.""",
+                """
+                🔄 Бот был обновлён, и в рамках перехода на новую, более точную систему подбора ваши \
+                предыдущие подписки были удалены.
+
+                Пожалуйста, подпишитесь заново, используя новую систему (регион → район → улица) — так \
+                результаты будут точнее. Нажмите /subscribe или кнопку «Подписаться» ниже, чтобы начать."""
+        );
+    }
+
     private static String text(Language lang, String hy, String en, String ru) {
         Map<Language, String> map = new EnumMap<>(Language.class);
         map.put(Language.HY, hy);

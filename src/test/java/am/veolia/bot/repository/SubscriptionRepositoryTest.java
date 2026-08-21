@@ -163,6 +163,40 @@ class SubscriptionRepositoryTest {
         assertThat(repository.findById(999L)).isEqualTo(Optional.empty());
     }
 
+    @Test
+    void findDistinctUserIdsWithSubscriptionsListsEachSubscribedUserOnce() {
+        repository.add(1L, "Աբովյան", false);
+        repository.addScopedStreet(1L, "Կոմիտաս", "KOTAYK", "", false);
+        repository.add(2L, "Կենտրոն", false);
+
+        assertThat(repository.findDistinctUserIdsWithSubscriptions()).containsExactlyInAnyOrder(1L, 2L);
+    }
+
+    @Test
+    void findDistinctUserIdsWithSubscriptionsExcludesUsersWithNone() {
+        repository.add(1L, "Աբովյան", false);
+
+        assertThat(repository.findDistinctUserIdsWithSubscriptions()).containsExactly(1L);
+    }
+
+    @Test
+    void removeAllForUserDeletesEveryOneOfThatUsersSubscriptionsButNoOneElses() {
+        repository.add(1L, "Աբովյան", false);
+        repository.addScopedStreet(1L, "Կոմիտաս", "KOTAYK", "", false);
+        repository.add(2L, "Կենտրոն", false);
+
+        int removed = repository.removeAllForUser(1L);
+
+        assertThat(removed).isEqualTo(2);
+        assertThat(repository.findByUserId(1L)).isEmpty();
+        assertThat(repository.findByUserId(2L)).hasSize(1);
+    }
+
+    @Test
+    void removeAllForUserReturnsZeroForAUserWithNoSubscriptions() {
+        assertThat(repository.removeAllForUser(1L)).isZero();
+    }
+
     private static List<String> schemaStatements() {
         return List.of(
                 """

@@ -172,7 +172,8 @@ am.veolia.bot
 ├── repository   SQLite persistence (UserRepository, SubscriptionRepository, ProcessedPostRepository)
 ├── model        domain records (OutageAnnouncement, ChannelPost, Subscription, Region, District, ...)
 ├── i18n         bot UI text in Armenian/English/Russian (Messages)
-└── config       env-var-driven configuration, DataSource wiring, bot registration
+├── config       env-var-driven configuration, DataSource wiring, bot registration
+└── maintenance  opt-in, one-off admin tasks — see "One-off: migration notice" (MigrationNoticeRunner)
 ```
 
 ## Bot commands & menu
@@ -214,6 +215,7 @@ sensitive is hardcoded.
 | `POLL_INTERVAL_MS` | no | `90000` | How often to poll the channel |
 | `POLL_INITIAL_DELAY_MS` | no | `5000` | Delay before the first poll after startup |
 | `BOT_DB_PATH` | no | `./data/bot.db` | Path to the SQLite database file — **see "Data durability" below** |
+| `RUN_MIGRATION_NOTICE` | no | `false` | **Destructive, one-off** — never set in the standing config, see "One-off: migration notice" |
 
 ### Admin subscribe notifications
 
@@ -384,6 +386,41 @@ steps from above.
 
 From then on, every push to `main` deploys automatically; you can also
 trigger a deploy manually from the Actions tab (`workflow_dispatch`).
+
+### One-off: migration notice
+
+`MigrationNoticeRunner` is a **destructive, opt-in-only** maintenance task
+for rolling out a matching-engine change that old subscriptions can't be
+automatically upgraded into (e.g. the region/district scoping rollout): for
+every subscriber, it deletes all of their subscriptions and DMs them a
+localized notice (`Messages.migrationNoticeResubscribe`) asking them to
+subscribe again with the new flow.
+
+It's gated behind `RUN_MIGRATION_NOTICE` (default `false` — a normal boot
+with it unset is a single cheap boolean check and otherwise does nothing).
+When it *is* true, it runs once at startup, then calls `System.exit(0)`
+immediately after — this process **never** goes on to register the bot for
+long-polling, so it can't collide with an already-running production
+instance's `getUpdates` connection for the same bot token.
+
+**To run it deliberately, once:**
+
+```bash
+ssh your-user@your-host
+sudo systemctl stop veolia-bot          # the live instance must not be polling
+cd /opt/veolia-bot
+sudo -u veolia-bot env $(grep -v '^#' veolia-bot.env | xargs) \
+     RUN_MIGRATION_NOTICE=true \
+     /usr/lib/jvm/java-21-openjdk-amd64/bin/java -jar veolia-jur-bot.jar
+# Watch the log lines this prints (subscriber count, per-user outcomes, final
+# summary), then:
+sudo systemctl start veolia-bot         # RUN_MIGRATION_NOTICE is NOT in veolia-bot.env, so this boots normally
+```
+
+Do **not** add `RUN_MIGRATION_NOTICE=true` to `/opt/veolia-bot/veolia-bot.env`
+itself — that would make every future `systemctl restart` (including every
+CI deploy) re-wipe every subscriber. It's a one-shot command-line override,
+never a standing config value.
 
 ## Out of scope for this version
 
