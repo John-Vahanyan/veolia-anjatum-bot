@@ -4,8 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -35,14 +33,8 @@ import java.util.List;
  * <p>Runs as an {@link ApplicationRunner}, which Spring Boot guarantees
  * fires only after {@code schema.sql} has already created the table (fresh
  * databases) or left an older-shaped one in place (migrated here).
- *
- * <p>{@code @Order(HIGHEST_PRECEDENCE)} guarantees this runs before any other
- * {@code ApplicationRunner} in the context — notably
- * {@code am.veolia.bot.maintenance.MigrationNoticeRunner}, which reads/writes
- * the {@code subscriptions} table and must never run against a stale shape.
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
 public class SubscriptionSchemaMigration implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(SubscriptionSchemaMigration.class);

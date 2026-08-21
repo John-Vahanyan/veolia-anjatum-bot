@@ -32,11 +32,6 @@ app:
     # redeploy never wipes subscriptions. Override in production, e.g.
     # BOT_DB_PATH=/opt/veolia-bot/data/bot.db (see README "Deployment").
     path: ${BOT_DB_PATH:./data/bot.db}
-  maintenance:
-    # DANGEROUS, one-off, off by default. When true at startup: wipes every
-    # subscriber's subscriptions, notifies each of them, then exits WITHOUT
-    # starting the bot/poller. See README "One-off: migration notice".
-    run-migration-notice: ${RUN_MIGRATION_NOTICE:false}
 
 logging:
   level:
