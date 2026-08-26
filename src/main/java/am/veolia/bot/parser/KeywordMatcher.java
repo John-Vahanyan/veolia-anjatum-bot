@@ -11,11 +11,14 @@ import java.util.regex.Pattern;
  * Decides whether a user's subscribed keyword (a street or district name)
  * matches a parsed outage announcement.
  *
- * <p>Armenian script has no upper/lower case distinction the way Latin
- * script does, so there's no case-folding step needed for correctness —
- * but we still lower-case defensively in case a keyword or post mixes in
- * Latin characters (e.g. a building number suffix), and we collapse
- * whitespace/punctuation so trivial formatting differences don't block a match.
+ * <p>Armenian script does distinguish upper/lower case, so post text (which
+ * capitalizes the first letter of every street/district name) and a
+ * user-typed keyword (which may not) are lower-cased before comparison —
+ * this also covers a keyword or post that mixes in Latin characters (e.g. a
+ * building number suffix). We also collapse whitespace/punctuation, and
+ * normalize hyphens to spaces, so trivial formatting differences (including
+ * a compound name written as "X-Y" in one post and "X Y" in another) don't
+ * block a match.
  *
  * <p>Matching can optionally be fuzzy (edit-distance-tolerant) rather than a
  * plain substring check: a keyword that started life as a
@@ -47,8 +50,14 @@ public class KeywordMatcher {
 
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
     // Collapses punctuation that commonly varies between how a street is written
-    // in a post vs. how a user might type it (commas, dashes, colons, quotes).
+    // in a post vs. how a user might type it (commas, colons, quotes).
     private static final Pattern PUNCTUATION_PATTERN = Pattern.compile("[,.:;«»\"'()]");
+    // Hyphenated compound names ("Մալաթիա-Սեբաստիա", "Քանաքեռ-Զեյթուն") sometimes appear in
+    // posts as two plain words instead ("Մալաթիա Սեբաստիա") -- normalized to a space rather
+    // than dropped outright, so both forms collapse to the same "word word" string instead of
+    // one merging into "wordword". Covers the ASCII hyphen-minus plus the Unicode dash range
+    // (en/em dash etc.) some posts use interchangeably.
+    private static final Pattern DASH_PATTERN = Pattern.compile("[-‐-―]");
 
     /** {@link #matches(String, OutageAnnouncement, boolean)} with fuzzy tolerance allowed. */
     public boolean matches(String keyword, OutageAnnouncement announcement) {
@@ -110,6 +119,7 @@ public class KeywordMatcher {
         }
         String normalized = Normalizer.normalize(text, Normalizer.Form.NFC).trim();
         normalized = PUNCTUATION_PATTERN.matcher(normalized).replaceAll("");
+        normalized = DASH_PATTERN.matcher(normalized).replaceAll(" ");
         normalized = WHITESPACE_PATTERN.matcher(normalized).replaceAll(" ");
         return normalized.toLowerCase();
     }

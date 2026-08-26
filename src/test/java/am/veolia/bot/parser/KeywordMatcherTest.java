@@ -46,6 +46,19 @@ class KeywordMatcherTest {
     }
 
     @Test
+    void treatsAHyphenatedDistrictNameAsEquivalentToTheSpacedForm() {
+        // Real posts inconsistently render this district as "Մալաթիա-Սեբաստիա" or
+        // "Մալաթիա Սեբաստիա" -- the scope check (never fuzzy) must still match either way.
+        OutageAnnouncement hyphenated = announcement("Երևանի Մալաթիա-Սեբաստիա վարչական շրջանում",
+                List.of("Իսրայել Օրի"));
+        OutageAnnouncement spaced = announcement("Երևանի Մալաթիա Սեբաստիա վարչական շրջանում",
+                List.of("Իսրայել Օրի"));
+
+        assertThat(matcher.matchesAny("Մալաթիա-Սեբաստիա", List.of(spaced.district()), false)).isTrue();
+        assertThat(matcher.matchesAny("Մալաթիա Սեբաստիա", List.of(hyphenated.district()), false)).isTrue();
+    }
+
+    @Test
     void blankKeywordNeverMatches() {
         OutageAnnouncement a = announcement("Երևանի Կենտրոն", List.of("Թումանյան 10"));
 
