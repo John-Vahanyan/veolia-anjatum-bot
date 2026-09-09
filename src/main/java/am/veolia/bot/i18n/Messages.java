@@ -237,7 +237,7 @@ public final class Messages {
     public static String supportPrompt(Language lang) {
         return text(lang,
                 """
-                Գրեք Ձեր առաջարկը, կամ նկարագրեք սխալը, որը գտել եք բոտում։ Ձեր հաղորդագրությունը                 կփոխանցվի բոտի մշակողին։
+                Գրեք Ձեր առաջարկը, կամ նկարագրեք սխալը, որը գտել եք բոտում։ Ձեր հաղորդագրությունը                 կփոխանցվի բոտի ստեղծողին։
 
                 Չեղարկելու համար պարզապես օգտագործեք ներքևի կոճակները։""",
                 """
@@ -252,7 +252,7 @@ public final class Messages {
 
     public static String supportReceived(Language lang) {
         return text(lang,
-                "Շնորհակալությո՛ւն։ Ձեր հաղորդագրությունը ուղարկվեց մշակողին։",
+                "Շնորհակալությո՛ւն։ Ձեր հաղորդագրությունը ուղարկվեց ստեղծողին։",
                 "Thank you! Your message has been sent to the developer.",
                 "Спасибо! Ваше сообщение отправлено разработчику.");
     }
