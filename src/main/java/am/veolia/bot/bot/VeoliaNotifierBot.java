@@ -40,8 +40,8 @@ import java.util.stream.Stream;
 /**
  * The user-facing side of the bot: {@code /start}, {@code /language},
  * {@code /subscribe}, {@code /unsubscribe}, {@code /list}, {@code /menu},
- * {@code /help} — plus a persistent button menu that mirrors those same
- * actions for users who'd rather tap than type.
+ * {@code /support}, {@code /help} — plus a persistent button menu that mirrors
+ * those same actions for users who'd rather tap than type.
  *
  * <p>Subscribing is a guided, button-driven flow: pick a region, then (for
  * Yerevan) a district, then choose either "the whole area" or "a specific
@@ -76,15 +76,27 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     private static final String BACK_TO_REGIONS_CALLBACK = "subback:region";
     private static final String BACK_TO_DISTRICTS_CALLBACK = "subback:district";
 
+    /** What we're expecting a chat's *next* plain-text message to mean, if anything. */
+    private sealed interface PendingAction permits PendingStreetEntry, PendingSupportMessage {
+    }
+
     /**
-     * What we're expecting a chat's *next* plain-text message to mean: the
-     * street name for a subscription already scoped to a region and/or
+     * The street name for a subscription already scoped to a region and/or
      * district. Either code may be blank but not both (a bare region scope
      * leaves districtCode blank; a Yerevan district scope always carries
      * {@link Region#YEREVAN}'s code alongside its own).
      */
-    private record PendingStreetEntry(String regionCode, String districtCode) {
+    private record PendingStreetEntry(String regionCode, String districtCode) implements PendingAction {
     }
+
+    /** A bug report or suggestion typed after /support — see {@link #handleSupportMessage}. */
+    private record PendingSupportMessage() implements PendingAction {
+    }
+
+    private static final PendingSupportMessage PENDING_SUPPORT = new PendingSupportMessage();
+
+    /** Telegram rejects messages over 4096 characters; this leaves room for the header we prepend. */
+    private static final int MAX_SUPPORT_MESSAGE_LENGTH = 3500;
 
     private final BotProperties botProperties;
     private final UserRepository userRepository;
@@ -99,7 +111,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
      * name next." Worst case on a restart mid-flow, the user has to start
      * over — not worth a DB column for that.
      */
-    private final Map<Long, PendingStreetEntry> pendingActions = new ConcurrentHashMap<>();
+    private final Map<Long, PendingAction> pendingActions = new ConcurrentHashMap<>();
 
     public VeoliaNotifierBot(BotProperties botProperties,
                               UserRepository userRepository,
@@ -170,6 +182,10 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             promptLanguage(chatId);
             return;
         }
+        if (isMenuButton(text, Messages.MENU_SUPPORT_HY, Messages.MENU_SUPPORT_EN, Messages.MENU_SUPPORT_RU)) {
+            promptSupport(chatId, lang);
+            return;
+        }
 
         if (text.startsWith("/")) {
             pendingActions.remove(chatId);
@@ -177,9 +193,13 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             return;
         }
 
-        PendingStreetEntry pending = pendingActions.remove(chatId);
-        if (pending != null) {
-            subscribeToScopedStreet(chatId, lang, text, pending.regionCode(), pending.districtCode(), message.getFrom());
+        PendingAction pending = pendingActions.remove(chatId);
+        if (pending instanceof PendingStreetEntry street) {
+            subscribeToScopedStreet(chatId, lang, text, street.regionCode(), street.districtCode(), message.getFrom());
+            return;
+        }
+        if (pending instanceof PendingSupportMessage) {
+            handleSupportMessage(chatId, lang, text, message.getFrom());
             return;
         }
 
@@ -210,6 +230,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             case "/subscribe" -> handleSubscribe(chatId, lang, argument, from);
             case "/unsubscribe" -> handleUnsubscribe(chatId, lang, argument);
             case "/list" -> handleList(chatId, lang);
+            case "/support" -> handleSupport(chatId, lang, argument, from);
             case "/help" -> send(chatId, Messages.help(lang));
             default -> send(chatId, Messages.unknownCommand(lang));
         }
@@ -639,6 +660,47 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         return subscription.keyword();
     }
 
+    // ---- Support / feedback ------------------------------------------------
+
+    /**
+     * {@code /support}. With no argument this arms {@link PendingSupportMessage} and asks the user
+     * to write; a message typed inline as {@code /support <text>} is taken as the report itself, so
+     * a user who already knows what they want to say doesn't need the extra round trip.
+     */
+    private void handleSupport(long chatId, Language lang, String argument, User from) {
+        if (argument.isBlank()) {
+            promptSupport(chatId, lang);
+            return;
+        }
+        handleSupportMessage(chatId, lang, argument, from);
+    }
+
+    private void promptSupport(long chatId, Language lang) {
+        pendingActions.put(chatId, PENDING_SUPPORT);
+        send(chatId, Messages.supportPrompt(lang));
+    }
+
+    /** Forwards a bug report or suggestion to {@link #adminChatId} and thanks the user. */
+    private void handleSupportMessage(long chatId, Language lang, String text, User from) {
+        String feedback = text.trim();
+        if (feedback.isBlank()) {
+            send(chatId, Messages.supportEmpty(lang));
+            return;
+        }
+        if (feedback.length() > MAX_SUPPORT_MESSAGE_LENGTH) {
+            feedback = feedback.substring(0, MAX_SUPPORT_MESSAGE_LENGTH) + "…";
+        }
+        // Logged unconditionally: with no admin chat configured, the log is the only
+        // place the user's message survives at all.
+        log.info("support message from chat {} ({}): {}", chatId, describeUser(from), feedback);
+        if (adminChatId != null) {
+            send(adminChatId, "💬 Support message from " + describeUser(from) + ":\n\n" + feedback);
+        } else {
+            log.warn("no app.bot.admin-chat-id configured — the support message above was not delivered to anyone");
+        }
+        send(chatId, Messages.supportReceived(lang));
+    }
+
     /** The always-visible bottom keyboard: one full-width button per row, Telegram's classic style. */
     private ReplyKeyboardMarkup buildMainMenu(Language lang) {
         KeyboardRow subscribeRow = new KeyboardRow();
@@ -649,12 +711,15 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         listRow.add(new KeyboardButton(Messages.menuListLabel(lang)));
         KeyboardRow languageRow = new KeyboardRow();
         languageRow.add(new KeyboardButton(Messages.menuLanguageLabel(lang)));
+        KeyboardRow supportRow = new KeyboardRow();
+        supportRow.add(new KeyboardButton(Messages.menuSupportLabel(lang)));
 
         return ReplyKeyboardMarkup.builder()
                 .keyboardRow(subscribeRow)
                 .keyboardRow(unsubscribeRow)
                 .keyboardRow(listRow)
                 .keyboardRow(languageRow)
+                .keyboardRow(supportRow)
                 .resizeKeyboard(true)
                 .build();
     }

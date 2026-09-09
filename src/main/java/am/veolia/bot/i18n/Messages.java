@@ -38,6 +38,7 @@ public final class Messages {
                 /unsubscribe <բառ> — չեղարկել բաժանորդագրությունը
                 /list — ցուցադրել բաժանորդագրությունները
                 /language — փոխել լեզուն
+                /support — առաջարկ կամ սխալի մասին հաղորդում
                 /help — օգնություն""",
                 """
                 Hi! I send notifications about water outage announcements from Veolia Jur.
@@ -51,6 +52,7 @@ public final class Messages {
                 /unsubscribe <keyword> — remove a subscription
                 /list — show your subscriptions
                 /language — change language
+                /support — send a suggestion or report a bug
                 /help — show help""",
                 """
                 Привет! Я отправляю уведомления об отключениях воды от «Veolia Jur».
@@ -64,6 +66,7 @@ public final class Messages {
                 /unsubscribe <слово> — удалить подписку
                 /list — показать ваши подписки
                 /language — изменить язык
+                /support — предложение или сообщение об ошибке
                 /help — показать справку"""
         );
     }
@@ -77,6 +80,7 @@ public final class Messages {
                 /list — ցուցադրել ընթացիկ բաժանորդագրությունները
                 /language — փոխել լեզուն
                 /menu — ցուցադրել կոճակների ընտրացանկը
+                /support — առաջարկ ուղարկել կամ սխալի մասին հաղորդել
                 /help — այս հաղորդագրությունը""",
                 """
                 You can use the buttons below, or these commands:
@@ -85,6 +89,7 @@ public final class Messages {
                 /list — show your current subscriptions
                 /language — change language
                 /menu — show the button menu
+                /support — send a suggestion or report a bug
                 /help — show this message""",
                 """
                 Можно использовать кнопки внизу или эти команды:
@@ -93,6 +98,7 @@ public final class Messages {
                 /list — показать текущие подписки
                 /language — изменить язык
                 /menu — показать меню кнопок
+                /support — отправить предложение или сообщить об ошибке
                 /help — показать это сообщение"""
         );
     }
@@ -203,6 +209,9 @@ public final class Messages {
     public static final String MENU_LANGUAGE_HY = "Փոխել լեզուն 🌐";
     public static final String MENU_LANGUAGE_EN = "Change language 🌐";
     public static final String MENU_LANGUAGE_RU = "Изменить язык 🌐";
+    public static final String MENU_SUPPORT_HY = "Աջակցություն 💬";
+    public static final String MENU_SUPPORT_EN = "Support 💬";
+    public static final String MENU_SUPPORT_RU = "Поддержка 💬";
 
     public static String menuSubscribeLabel(Language lang) {
         return text(lang, MENU_SUBSCRIBE_HY, MENU_SUBSCRIBE_EN, MENU_SUBSCRIBE_RU);
@@ -218,6 +227,42 @@ public final class Messages {
 
     public static String menuLanguageLabel(Language lang) {
         return text(lang, MENU_LANGUAGE_HY, MENU_LANGUAGE_EN, MENU_LANGUAGE_RU);
+    }
+
+    public static String menuSupportLabel(Language lang) {
+        return text(lang, MENU_SUPPORT_HY, MENU_SUPPORT_EN, MENU_SUPPORT_RU);
+    }
+
+    /** Shown by /support (or the Support menu button) while we wait for the user's next message. */
+    public static String supportPrompt(Language lang) {
+        return text(lang,
+                """
+                Գրեք Ձեր առաջարկը, կամ նկարագրեք սխալը, որը գտել եք բոտում։ Ձեր հաղորդագրությունը                 կփոխանցվի բոտի մշակողին։
+
+                Չեղարկելու համար պարզապես օգտագործեք ներքևի կոճակները։""",
+                """
+                Please write your suggestion, or describe the bug you found in the bot. Your                 message will be passed on to the bot's developer.
+
+                To cancel, just use the menu buttons below.""",
+                """
+                Напишите ваше предложение или опишите ошибку, которую вы нашли в боте. Ваше                 сообщение будет передано разработчику бота.
+
+                Чтобы отменить, просто используйте кнопки меню внизу.""");
+    }
+
+    public static String supportReceived(Language lang) {
+        return text(lang,
+                "Շնորհակալությո՛ւն։ Ձեր հաղորդագրությունը ուղարկվեց մշակողին։",
+                "Thank you! Your message has been sent to the developer.",
+                "Спасибо! Ваше сообщение отправлено разработчику.");
+    }
+
+    /** Shown when the user sends an empty/whitespace-only support message. */
+    public static String supportEmpty(Language lang) {
+        return text(lang,
+                "Հաղորդագրությունը դատարկ է։ Կրկին փորձեք /support հրամանով։",
+                "That message was empty. Please try again with /support.",
+                "Сообщение пустое. Попробуйте ещё раз с помощью /support.");
     }
 
     public static String menuTitle(Language lang) {

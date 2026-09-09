@@ -194,6 +194,7 @@ way in.
 | `/subscribe <keyword>` | Subscribe to a street or district name |
 | `/unsubscribe <keyword>` | Remove a subscription |
 | `/list` | Show current subscriptions |
+| `/support` | Send a suggestion or report a bug — the message is forwarded to `ADMIN_CHAT_ID` |
 | `/help` | List available commands |
 
 The bot's own messages (greetings, confirmations, help, menu labels) are
@@ -209,7 +210,7 @@ sensitive is hardcoded.
 |---|---|---|---|
 | `BOT_TOKEN` | **yes** | — | Telegram bot token from [@BotFather](https://t.me/BotFather) |
 | `BOT_USERNAME` | no | — | Your bot's `@username` (only used to strip `/cmd@YourBot` in group chats) |
-| `ADMIN_CHAT_ID` | no | — | Numeric chat id to notify on every new subscription — **see "Admin subscribe notifications" below** |
+| `ADMIN_CHAT_ID` | no | — | Numeric chat id to notify on every new subscription and to receive `/support` messages — **see "Admin subscribe notifications" below** |
 | `CHANNEL_USERNAME` | no | `VeoliaJur` | Public channel to poll (no `@`, no `t.me/` prefix) |
 | `POLL_INTERVAL_MS` | no | `90000` | How often to poll the channel |
 | `POLL_INITIAL_DELAY_MS` | no | `5000` | Delay before the first poll after startup |
@@ -220,6 +221,12 @@ sensitive is hardcoded.
 Set `ADMIN_CHAT_ID` to get a message every time anyone subscribes:
 `🔔 Jon Doe (@jondoe, id 123456789) subscribed to: Kentron — Abovyan`. Leave
 it unset (the default) to disable this entirely.
+
+The same chat also receives whatever users send via `/support`:
+`💬 Support message from Jon Doe (@jondoe, id 123456789):` followed by their
+text. Support messages are always written to the log as well, so with
+`ADMIN_CHAT_ID` unset they're still recorded (with a warning) rather than
+lost — but nobody is notified.
 
 The value is a numeric **chat id**, not a `@username` — Telegram bots can
 only message a chat that has already interacted with them, so this only
