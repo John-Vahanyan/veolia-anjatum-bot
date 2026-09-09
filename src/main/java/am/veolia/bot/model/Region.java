@@ -16,7 +16,7 @@ package am.veolia.bot.model;
  * the buttons/messages shown to the user.
  */
 public enum Region {
-    YEREVAN("Երևան", "Yerevan", "Ереван"),
+    TAVUSH("Տավուշ", "Tavush", "Тавуш"),
     ARAGATSOTN("Արագածոտն", "Aragatsotn", "Арагацотн"),
     ARARAT("Արարատ", "Ararat", "Арарат"),
     ARMAVIR("Արմավիր", "Armavir", "Армавир"),
@@ -26,7 +26,7 @@ public enum Region {
     SHIRAK("Շիրակ", "Shirak", "Ширак"),
     SYUNIK("Սյունիք", "Syunik", "Сюник"),
     VAYOTS_DZOR("Վայոց ձոր", "Vayots Dzor", "Вайоц Дзор"),
-    TAVUSH("Տավուշ", "Tavush", "Тавуш");
+    YEREVAN("Երևան", "Yerevan", "Ереван");
 
     private final String armenian;
     private final String english;
