@@ -95,6 +95,16 @@ class KeywordMatcherTest {
     }
 
     @Test
+    void treatsTheAbbreviatedStreetWordAsEquivalentToTheFullWord() {
+        // Posts sometimes abbreviate "փողոց" ("street") down to just "փ" -- a keyword typed
+        // with the full word must still match the abbreviated form, and vice versa.
+        OutageAnnouncement abbreviated = announcement("Երևանի Կենտրոն", List.of("Կոմիտաս փ."));
+
+        assertThat(matcher.matches("Կոմիտաս փողոց", abbreviated)).isTrue();
+        assertThat(matcher.matches("Կոմիտաս փողոցի", abbreviated)).isTrue();
+    }
+
+    @Test
     void scopedMatchRequiresBothTheScopeAndTheStreetToMatch() {
         OutageAnnouncement a = announcement("Երևանի Շենգավիթ վարչական շրջանում",
                 List.of("Մանթաշյան 6-12 զույգ համարի շենքերի"));

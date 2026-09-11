@@ -18,7 +18,9 @@ import java.util.regex.Pattern;
  * building number suffix). We also collapse whitespace/punctuation, and
  * normalize hyphens to spaces, so trivial formatting differences (including
  * a compound name written as "X-Y" in one post and "X Y" in another) don't
- * block a match.
+ * block a match. "փողոց" ("street") is additionally collapsed down to its
+ * first letter "փ", since posts (and users) sometimes abbreviate it that
+ * way instead of writing it out in full.
  *
  * <p>Matching can optionally be fuzzy (edit-distance-tolerant) rather than a
  * plain substring check: a keyword that started life as a
@@ -58,6 +60,12 @@ public class KeywordMatcher {
     // one merging into "wordword". Covers the ASCII hyphen-minus plus the Unicode dash range
     // (en/em dash etc.) some posts use interchangeably.
     private static final Pattern DASH_PATTERN = Pattern.compile("[-‐-―]");
+
+    // "փողոց" ("street"), in whatever grammatical form it appears in ("փողոցի", "փողոցում",
+    // "փողոցների", ...), is sometimes written out in full and sometimes abbreviated down to just
+    // its first letter "փ" -- both need to normalize to the same token so a keyword typed with
+    // the full word still matches a post that abbreviates it, and vice versa.
+    private static final Pattern STREET_WORD_PATTERN = Pattern.compile("փողոց\\S*");
 
     /** {@link #matches(String, OutageAnnouncement, boolean)} with fuzzy tolerance allowed. */
     public boolean matches(String keyword, OutageAnnouncement announcement) {
@@ -117,11 +125,12 @@ public class KeywordMatcher {
         if (text == null) {
             return "";
         }
-        String normalized = Normalizer.normalize(text, Normalizer.Form.NFC).trim();
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFC).trim().toLowerCase();
+        normalized = STREET_WORD_PATTERN.matcher(normalized).replaceAll("փ");
         normalized = PUNCTUATION_PATTERN.matcher(normalized).replaceAll("");
         normalized = DASH_PATTERN.matcher(normalized).replaceAll(" ");
         normalized = WHITESPACE_PATTERN.matcher(normalized).replaceAll(" ");
-        return normalized.toLowerCase();
+        return normalized;
     }
 
     private boolean contains(String text, String pattern, boolean allowFuzzy) {
