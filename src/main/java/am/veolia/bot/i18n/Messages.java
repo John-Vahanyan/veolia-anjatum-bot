@@ -287,6 +287,79 @@ public final class Messages {
                 "Спасибо! Ваше сообщение отправлено разработчику.");
     }
 
+    // ---- Admin-only: support messages and replies to them ----
+
+    public static String adminSupportMessageHeader(Language lang, String user) {
+        return text(lang,
+                "💬 Նոր հաղորդագրություն աջակցությանը։ Ուղարկող՝ " + user,
+                "💬 Support message from " + user + ":",
+                "💬 Сообщение в поддержку от " + user + ":");
+    }
+
+    public static String buttonAdminReply(Language lang) {
+        return text(lang, "↩️ Պատասխանել", "↩️ Reply", "↩️ Ответить");
+    }
+
+    public static String adminReplyPrompt(Language lang, String user) {
+        return text(lang,
+                "✍️ Գրեք Ձեր պատասխանը։ Ստացող՝ " + user + "։ Ուղարկելուց առաջ բոտը կխնդրի հաստատել։\n\n"
+                        + "Չեղարկելու համար օգտագործեք ցանկացած կոճակ կամ հրաման։",
+                "✍️ Write your reply to " + user + ". You'll be asked to confirm before it's sent.\n\n"
+                        + "To cancel, use any menu button or command.",
+                "✍️ Напишите ответ пользователю " + user + ". Перед отправкой бот попросит подтверждение.\n\n"
+                        + "Чтобы отменить, используйте любую кнопку меню или команду.");
+    }
+
+    public static String adminReplyTooLong(Language lang, int length, int max) {
+        return text(lang,
+                "Պատասխանը չափազանց երկար է (" + length + " նիշ, առավելագույնը՝ " + max + ")։ Ուղարկեք ավելի կարճ տարբերակ։",
+                "That reply is too long (" + length + " characters, max " + max + "). Please send a shorter one.",
+                "Ответ слишком длинный (" + length + " символов, максимум " + max + "). Отправьте покороче.");
+    }
+
+    public static String adminReplyConfirm(Language lang, String user) {
+        return text(lang,
+                "Իսկապե՞ս ուղարկել այս հաղորդագրությունը։ Ստացող՝ " + user,
+                "Do you really want to send this to " + user + "?",
+                "Вы действительно хотите отправить это пользователю " + user + "?");
+    }
+
+    public static String buttonAdminReplySend(Language lang) {
+        return text(lang, "✅ Այո, ուղարկել", "✅ Yes, send", "✅ Да, отправить");
+    }
+
+    public static String buttonAdminReplyCancel(Language lang) {
+        return text(lang, "❌ Չեղարկել", "❌ Cancel", "❌ Отмена");
+    }
+
+    public static String adminReplySent(Language lang, String user) {
+        return text(lang,
+                "✅ Ուղարկվեց։ Ստացող՝ " + user,
+                "✅ Sent to " + user + ".",
+                "✅ Отправлено пользователю " + user + ".");
+    }
+
+    public static String adminReplyFailed(Language lang, String user) {
+        return text(lang,
+                "⚠️ Չհաջողվեց ուղարկել։ Ստացող՝ " + user + "։ Հնարավոր է՝ նա արգելափակել է բոտը։",
+                "⚠️ Couldn't deliver to " + user + " — they may have blocked the bot.",
+                "⚠️ Не удалось доставить пользователю " + user + " — возможно, он заблокировал бота.");
+    }
+
+    public static String adminReplyCancelled(Language lang) {
+        return text(lang,
+                "Չեղարկվեց․ ոչինչ չուղարկվեց։",
+                "Cancelled — nothing was sent.",
+                "Отменено — ничего не отправлено.");
+    }
+
+    public static String adminReplyGone(Language lang) {
+        return text(lang,
+                "Այս պատասխանն արդեն ուղարկվել կամ չեղարկվել է։",
+                "This reply was already sent or cancelled.",
+                "Этот ответ уже отправлен или отменён.");
+    }
+
     /** Heading above the admin's answer to a user's /support message. */
     public static String supportReplyHeader(Language lang) {
         return text(lang,

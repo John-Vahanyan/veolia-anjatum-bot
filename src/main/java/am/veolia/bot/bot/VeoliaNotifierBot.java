@@ -791,11 +791,12 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         // place the user's message survives at all.
         log.info("support message from chat {} ({}): {}", chatId, describeUser(from), feedback);
         if (adminChatId != null) {
+            Language adminLang = currentLanguage(adminChatId);
             InlineKeyboardButton replyButton = InlineKeyboardButton.builder()
-                    .text("↩️ Reply")
+                    .text(Messages.buttonAdminReply(adminLang))
                     .callbackData(SUPPORT_REPLY_CALLBACK_PREFIX + chatId)
                     .build();
-            send(adminChatId, "💬 Support message from " + describeUser(from) + ":\n\n" + feedback,
+            send(adminChatId, Messages.adminSupportMessageHeader(adminLang, describeUser(from)) + "\n\n" + feedback,
                     InlineKeyboardMarkup.builder().keyboardRow(List.of(replyButton)).build());
         } else {
             log.warn("no app.bot.admin-chat-id configured — the support message above was not delivered to anyone");
@@ -818,16 +819,15 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             return;
         }
         pendingActions.put(adminChat, new PendingAdminReply(targetChatId));
-        send(adminChat, "✍️ Write your reply to " + describeChat(targetChatId)
-                + ". You'll be asked to confirm before it's sent.\n\nTo cancel, use any menu button or command.");
+        send(adminChat, Messages.adminReplyPrompt(currentLanguage(adminChat), describeChat(targetChatId)));
     }
 
     /** The admin typed their answer: show it back with "Send" / "Cancel" instead of sending right away. */
     private void handleAdminReplyText(long adminChat, long targetChatId, String text) {
+        Language adminLang = currentLanguage(adminChat);
         if (text.length() > MAX_SUPPORT_MESSAGE_LENGTH) {
             pendingActions.put(adminChat, new PendingAdminReply(targetChatId));
-            send(adminChat, "That reply is too long (" + text.length() + " characters, max "
-                    + MAX_SUPPORT_MESSAGE_LENGTH + "). Please send a shorter one.");
+            send(adminChat, Messages.adminReplyTooLong(adminLang, text.length(), MAX_SUPPORT_MESSAGE_LENGTH));
             return;
         }
         String targetDescription = describeChat(targetChatId);
@@ -835,14 +835,14 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         adminReplyDrafts.put(draftId, new AdminReplyDraft(targetChatId, targetDescription, text));
 
         InlineKeyboardButton sendButton = InlineKeyboardButton.builder()
-                .text("✅ Yes, send")
+                .text(Messages.buttonAdminReplySend(adminLang))
                 .callbackData(SUPPORT_SEND_CALLBACK_PREFIX + draftId)
                 .build();
         InlineKeyboardButton cancelButton = InlineKeyboardButton.builder()
-                .text("❌ Cancel")
+                .text(Messages.buttonAdminReplyCancel(adminLang))
                 .callbackData(SUPPORT_CANCEL_CALLBACK_PREFIX + draftId)
                 .build();
-        send(adminChat, "Do you really want to send this to " + targetDescription + "?\n\n" + text,
+        send(adminChat, Messages.adminReplyConfirm(adminLang, targetDescription) + "\n\n" + text,
                 InlineKeyboardMarkup.builder().keyboardRow(List.of(sendButton, cancelButton)).build());
     }
 
@@ -855,14 +855,15 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         boolean delivered = trySend(draft.targetChatId(), Messages.supportReplyHeader(targetLang) + "\n\n" + draft.text());
         log.info("admin reply to chat {} ({}){}: {}", draft.targetChatId(), draft.targetDescription(),
                 delivered ? "" : " FAILED", draft.text());
+        Language adminLang = currentLanguage(adminChat);
         send(adminChat, delivered
-                ? "✅ Sent to " + draft.targetDescription() + "."
-                : "⚠️ Couldn't deliver to " + draft.targetDescription() + " — they may have blocked the bot.");
+                ? Messages.adminReplySent(adminLang, draft.targetDescription())
+                : Messages.adminReplyFailed(adminLang, draft.targetDescription()));
     }
 
     private void handleAdminReplyCancelled(long adminChat, String draftIdRaw) {
         if (takeAdminReplyDraft(adminChat, draftIdRaw) != null) {
-            send(adminChat, "Cancelled — nothing was sent.");
+            send(adminChat, Messages.adminReplyCancelled(currentLanguage(adminChat)));
         }
     }
 
@@ -875,7 +876,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             // fall through to the "gone" message
         }
         if (draft == null) {
-            send(adminChat, "This reply was already sent or cancelled.");
+            send(adminChat, Messages.adminReplyGone(currentLanguage(adminChat)));
         }
         return draft;
     }
