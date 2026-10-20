@@ -224,7 +224,9 @@ it unset (the default) to disable this entirely.
 
 The same chat also receives whatever users send via `/support`:
 `💬 Support message from Jon Doe (@jondoe, id 123456789):` followed by their
-text. Support messages are always written to the log as well, so with
+text and a **↩️ Reply** button. Tap it, send your answer, and the bot asks you
+to confirm (**✅ Yes, send** / **❌ Cancel**) before delivering it to that user
+from the bot. Support messages are always written to the log as well, so with
 `ADMIN_CHAT_ID` unset they're still recorded (with a warning) rather than
 lost — but nobody is notified.
 

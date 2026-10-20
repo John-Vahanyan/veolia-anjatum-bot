@@ -257,6 +257,14 @@ public final class Messages {
                 "Спасибо! Ваше сообщение отправлено разработчику.");
     }
 
+    /** Heading above the admin's answer to a user's /support message. */
+    public static String supportReplyHeader(Language lang) {
+        return text(lang,
+                "💬 Պատասխան բոտի ստեղծողից՝",
+                "💬 Reply from the bot's developer:",
+                "💬 Ответ от разработчика бота:");
+    }
+
     /** Shown when the user sends an empty/whitespace-only support message. */
     public static String supportEmpty(Language lang) {
         return text(lang,

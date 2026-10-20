@@ -16,8 +16,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
+import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChat;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
+import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
@@ -35,6 +37,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 /**
@@ -76,8 +79,14 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     private static final String BACK_TO_REGIONS_CALLBACK = "subback:region";
     private static final String BACK_TO_DISTRICTS_CALLBACK = "subback:district";
 
+    // Admin-only: replying to a forwarded support message. "sup" (not "sub") so these can't
+    // collide with the guided-subscribe prefixes above.
+    private static final String SUPPORT_REPLY_CALLBACK_PREFIX = "supreply:";
+    private static final String SUPPORT_SEND_CALLBACK_PREFIX = "supsend:";
+    private static final String SUPPORT_CANCEL_CALLBACK_PREFIX = "supcancel:";
+
     /** What we're expecting a chat's *next* plain-text message to mean, if anything. */
-    private sealed interface PendingAction permits PendingStreetEntry, PendingSupportMessage {
+    private sealed interface PendingAction permits PendingStreetEntry, PendingSupportMessage, PendingAdminReply {
     }
 
     /**
@@ -94,6 +103,14 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     }
 
     private static final PendingSupportMessage PENDING_SUPPORT = new PendingSupportMessage();
+
+    /** The admin tapped "Reply" under a support message; their next text is the answer to {@code targetChatId}. */
+    private record PendingAdminReply(long targetChatId) implements PendingAction {
+    }
+
+    /** An admin reply typed and awaiting the "Send" / "Cancel" confirmation — see {@link #handleAdminReplyText}. */
+    private record AdminReplyDraft(long targetChatId, String targetDescription, String text) {
+    }
 
     /** Telegram rejects messages over 4096 characters; this leaves room for the header we prepend. */
     private static final int MAX_SUPPORT_MESSAGE_LENGTH = 3500;
@@ -112,6 +129,16 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
      * over — not worth a DB column for that.
      */
     private final Map<Long, PendingAction> pendingActions = new ConcurrentHashMap<>();
+
+    /**
+     * Admin replies awaiting confirmation, keyed by a draft id carried in the confirm buttons'
+     * callback data (the text itself is too long to fit there). Kept apart from
+     * {@link #pendingActions} because any button tap clears that, including the confirm tap
+     * itself. Removed on send/cancel, so a second tap on the same button can't send twice.
+     * In-memory like pendingActions: a restart just means re-tapping "Reply".
+     */
+    private final Map<Long, AdminReplyDraft> adminReplyDrafts = new ConcurrentHashMap<>();
+    private final AtomicLong nextAdminReplyDraftId = new AtomicLong();
 
     public VeoliaNotifierBot(BotProperties botProperties,
                               UserRepository userRepository,
@@ -200,6 +227,10 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         }
         if (pending instanceof PendingSupportMessage) {
             handleSupportMessage(chatId, lang, text, message.getFrom());
+            return;
+        }
+        if (pending instanceof PendingAdminReply reply && isAdmin(chatId)) {
+            handleAdminReplyText(chatId, reply.targetChatId(), text);
             return;
         }
 
@@ -295,6 +326,12 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             handleDistrictStreetPicked(chatId, lang, data.substring(DISTRICT_STREET_CALLBACK_PREFIX.length()));
         } else if (data != null && data.startsWith(DISTRICT_CALLBACK_PREFIX)) {
             handleDistrictPicked(chatId, lang, data.substring(DISTRICT_CALLBACK_PREFIX.length()));
+        } else if (data != null && data.startsWith(SUPPORT_REPLY_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            handleAdminReplyPicked(chatId, data.substring(SUPPORT_REPLY_CALLBACK_PREFIX.length()));
+        } else if (data != null && data.startsWith(SUPPORT_SEND_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            handleAdminReplyConfirmed(chatId, data.substring(SUPPORT_SEND_CALLBACK_PREFIX.length()));
+        } else if (data != null && data.startsWith(SUPPORT_CANCEL_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            handleAdminReplyCancelled(chatId, data.substring(SUPPORT_CANCEL_CALLBACK_PREFIX.length()));
         }
         answerCallback(callbackQuery.getId());
     }
@@ -694,11 +731,115 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         // place the user's message survives at all.
         log.info("support message from chat {} ({}): {}", chatId, describeUser(from), feedback);
         if (adminChatId != null) {
-            send(adminChatId, "💬 Support message from " + describeUser(from) + ":\n\n" + feedback);
+            InlineKeyboardButton replyButton = InlineKeyboardButton.builder()
+                    .text("↩️ Reply")
+                    .callbackData(SUPPORT_REPLY_CALLBACK_PREFIX + chatId)
+                    .build();
+            send(adminChatId, "💬 Support message from " + describeUser(from) + ":\n\n" + feedback,
+                    InlineKeyboardMarkup.builder().keyboardRow(List.of(replyButton)).build());
         } else {
             log.warn("no app.bot.admin-chat-id configured — the support message above was not delivered to anyone");
         }
         send(chatId, Messages.supportReceived(lang));
+    }
+
+    // ---- Admin replies to support messages ------------------------------------
+
+    private boolean isAdmin(long chatId) {
+        return adminChatId != null && adminChatId == chatId;
+    }
+
+    /** The admin tapped "Reply" under a forwarded support message: wait for the answer text. */
+    private void handleAdminReplyPicked(long adminChat, String targetChatIdRaw) {
+        long targetChatId;
+        try {
+            targetChatId = Long.parseLong(targetChatIdRaw);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        pendingActions.put(adminChat, new PendingAdminReply(targetChatId));
+        send(adminChat, "✍️ Write your reply to " + describeChat(targetChatId)
+                + ". You'll be asked to confirm before it's sent.\n\nTo cancel, use any menu button or command.");
+    }
+
+    /** The admin typed their answer: show it back with "Send" / "Cancel" instead of sending right away. */
+    private void handleAdminReplyText(long adminChat, long targetChatId, String text) {
+        if (text.length() > MAX_SUPPORT_MESSAGE_LENGTH) {
+            pendingActions.put(adminChat, new PendingAdminReply(targetChatId));
+            send(adminChat, "That reply is too long (" + text.length() + " characters, max "
+                    + MAX_SUPPORT_MESSAGE_LENGTH + "). Please send a shorter one.");
+            return;
+        }
+        String targetDescription = describeChat(targetChatId);
+        long draftId = nextAdminReplyDraftId.incrementAndGet();
+        adminReplyDrafts.put(draftId, new AdminReplyDraft(targetChatId, targetDescription, text));
+
+        InlineKeyboardButton sendButton = InlineKeyboardButton.builder()
+                .text("✅ Yes, send")
+                .callbackData(SUPPORT_SEND_CALLBACK_PREFIX + draftId)
+                .build();
+        InlineKeyboardButton cancelButton = InlineKeyboardButton.builder()
+                .text("❌ Cancel")
+                .callbackData(SUPPORT_CANCEL_CALLBACK_PREFIX + draftId)
+                .build();
+        send(adminChat, "Do you really want to send this to " + targetDescription + "?\n\n" + text,
+                InlineKeyboardMarkup.builder().keyboardRow(List.of(sendButton, cancelButton)).build());
+    }
+
+    private void handleAdminReplyConfirmed(long adminChat, String draftIdRaw) {
+        AdminReplyDraft draft = takeAdminReplyDraft(adminChat, draftIdRaw);
+        if (draft == null) {
+            return;
+        }
+        Language targetLang = currentLanguage(draft.targetChatId());
+        boolean delivered = trySend(draft.targetChatId(), Messages.supportReplyHeader(targetLang) + "\n\n" + draft.text());
+        log.info("admin reply to chat {} ({}){}: {}", draft.targetChatId(), draft.targetDescription(),
+                delivered ? "" : " FAILED", draft.text());
+        send(adminChat, delivered
+                ? "✅ Sent to " + draft.targetDescription() + "."
+                : "⚠️ Couldn't deliver to " + draft.targetDescription() + " — they may have blocked the bot.");
+    }
+
+    private void handleAdminReplyCancelled(long adminChat, String draftIdRaw) {
+        if (takeAdminReplyDraft(adminChat, draftIdRaw) != null) {
+            send(adminChat, "Cancelled — nothing was sent.");
+        }
+    }
+
+    /** Removes and returns the draft, or tells the admin it's gone (already sent/cancelled, or lost to a restart). */
+    private AdminReplyDraft takeAdminReplyDraft(long adminChat, String draftIdRaw) {
+        AdminReplyDraft draft = null;
+        try {
+            draft = adminReplyDrafts.remove(Long.parseLong(draftIdRaw));
+        } catch (NumberFormatException e) {
+            // fall through to the "gone" message
+        }
+        if (draft == null) {
+            send(adminChat, "This reply was already sent or cancelled.");
+        }
+        return draft;
+    }
+
+    /** Like {@link #describeUser}, but for a chat we only know the id of — falls back to just the id. */
+    private String describeChat(long chatId) {
+        try {
+            Chat chat = super.execute(GetChat.builder().chatId(chatId).build());
+            String name = String.join(" ",
+                            Stream.of(chat.getFirstName(), chat.getLastName())
+                                    .filter(part -> part != null && !part.isBlank())
+                                    .toList())
+                    .trim();
+            if (name.isBlank()) {
+                name = "id " + chatId;
+            }
+            String username = chat.getUserName();
+            return username != null && !username.isBlank()
+                    ? name + " (@" + username + ", id " + chatId + ")"
+                    : name + " (id " + chatId + ")";
+        } catch (TelegramApiException e) {
+            log.debug("Failed to look up chat {}: {}", chatId, e.toString());
+            return "id " + chatId;
+        }
     }
 
     /** The always-visible bottom keyboard: one full-width button per row, Telegram's classic style. */
@@ -779,10 +920,21 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     }
 
     private void execute(SendMessage sendMessage) {
+        trySend(sendMessage);
+    }
+
+    /** Like {@link #send(long, String)}, but reports whether Telegram accepted the message. */
+    private boolean trySend(long chatId, String text) {
+        return trySend(SendMessage.builder().chatId(chatId).text(text).build());
+    }
+
+    private boolean trySend(SendMessage sendMessage) {
         try {
             super.execute(sendMessage);
+            return true;
         } catch (TelegramApiException e) {
             log.warn("Failed to send message to chat {}: {}", sendMessage.getChatId(), e.toString());
+            return false;
         }
     }
 
