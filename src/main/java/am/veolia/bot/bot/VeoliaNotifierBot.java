@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -113,6 +114,17 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     /** An admin reply typed and awaiting the "Send" / "Cancel" confirmation — see {@link #handleAdminReplyText}. */
     private record AdminReplyDraft(long targetChatId, String targetDescription, String text) {
     }
+
+    private static final Pattern DIGIT_PATTERN = Pattern.compile("\\d");
+    // A whole token containing a digit ("12", "12/3", "12ա", "N5"), a standalone "№" sign, or a
+    // "building"/"house" word that only makes sense next to a number — including the transliterated
+    // forms of Russian "д."/"дом" ("դ."/"դոմ"), since the keyword is already Armenianized here.
+    private static final Pattern NUMBER_TOKEN_PATTERN = Pattern.compile(
+            "\\S*\\d\\S*|№|(?<!\\S)(?:շենք|շ|տուն|տ|դոմ|դ)\\.?(?!\\S)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern WHITESPACE_RUN_PATTERN = Pattern.compile("\\s+");
+    // Separators left dangling at either end once the numbers are gone ("Աբովյան , " -> "Աբովյան").
+    private static final Pattern EDGE_JUNK_PATTERN = Pattern.compile("^[\\s,.;:/-]+|[\\s,.;:/-]+$");
 
     /** Telegram rejects messages over 4096 characters; this leaves room for the header we prepend. */
     private static final int MAX_SUPPORT_MESSAGE_LENGTH = 3500;
@@ -610,6 +622,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         } else {
             send(chatId, Messages.subscribed(lang, keyword));
         }
+        sendStreetNumberTipIfNeeded(chatId, lang, keyword);
     }
 
     /** Guided-flow path: a street name entered after narrowing to a region/district scope. */
@@ -639,6 +652,23 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         } else {
             send(chatId, Messages.subscribedScopedStreet(lang, scopeDisplay, keyword));
         }
+        sendStreetNumberTipIfNeeded(chatId, lang, keyword);
+    }
+
+    /**
+     * Posts list a street once followed by its building numbers ("Աբովյան 12, 14, 16"), so a
+     * keyword with a number in it ("Աբովյան 12") easily misses an announcement for that very
+     * building. The subscription is still kept as typed — the user may know better — but they
+     * get a follow-up suggesting the bare street name instead.
+     */
+    private void sendStreetNumberTipIfNeeded(long chatId, Language lang, String keyword) {
+        if (!DIGIT_PATTERN.matcher(keyword).find()) {
+            return;
+        }
+        String withoutNumbers = NUMBER_TOKEN_PATTERN.matcher(keyword).replaceAll(" ");
+        String suggestion = EDGE_JUNK_PATTERN.matcher(WHITESPACE_RUN_PATTERN.matcher(withoutNumbers).replaceAll(" "))
+                .replaceAll("");
+        send(chatId, Messages.streetNumberTip(lang, suggestion));
     }
 
     private String scopeDisplayName(Language lang, String regionCode, String districtCode) {

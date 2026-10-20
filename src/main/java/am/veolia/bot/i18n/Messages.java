@@ -130,6 +130,30 @@ public final class Messages {
                 "Вы подписались на «" + keyword + "».");
     }
 
+    /**
+     * Follow-up tip when the typed street name contains a number (e.g. a building number).
+     * {@code suggestion} is the name with the numbers stripped, or blank if nothing was left.
+     */
+    public static String streetNumberTip(Language lang, String suggestion) {
+        boolean hasSuggestion = suggestion != null && !suggestion.isBlank();
+        return text(lang,
+                "💡 Խորհուրդ՝ հայտարարություններում փողոցը սովորաբար նշվում է շենքերի համարների հետ "
+                        + "միասին, ուստի համարով բաժանորդագրությունը կարող է բաց թողնել դրանք։ Ավելի լավ "
+                        + "արդյունքի համար բաժանորդագրվեք միայն փողոցի անվանը"
+                        + (hasSuggestion ? "՝ օրինակ «" + suggestion + "»։" : "՝ առանց համարի։")
+                        + "\n\nԱյս բաժանորդագրությունը կարող եք հեռացնել «" + MENU_UNSUBSCRIBE_HY + "» կոճակով։",
+                "💡 Tip: announcements usually list a street together with several building numbers, "
+                        + "so a subscription that includes a number may miss them. For better results, "
+                        + "subscribe to just the street name"
+                        + (hasSuggestion ? ", e.g. \"" + suggestion + "\"." : ", without the number.")
+                        + "\n\nYou can remove this subscription with the \"" + MENU_UNSUBSCRIBE_EN + "\" button.",
+                "💡 Совет: в объявлениях улица обычно указывается вместе с номерами домов, поэтому "
+                        + "подписка с номером может их пропустить. Для лучшего результата подпишитесь только "
+                        + "на название улицы"
+                        + (hasSuggestion ? ", например «" + suggestion + "»." : ", без номера.")
+                        + "\n\nЭту подписку можно удалить кнопкой «" + MENU_UNSUBSCRIBE_RU + "».");
+    }
+
     /** Used when the stored keyword differs from what the user typed (transliterated to Armenian). */
     public static String subscribedTransliterated(Language lang, String original, String armenian) {
         return text(lang,
