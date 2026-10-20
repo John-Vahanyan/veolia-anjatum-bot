@@ -29,6 +29,8 @@ public final class Messages {
                 Բարև ձեզ։ Ես ծանուցումներ եմ ուղարկում «Վեոլիա Ջուր» ընկերության ջրանջատումների \
                 մասին։
 
+                ℹ️ Սա «Վեոլիա Ջուր»-ի պաշտոնական բոտը չէ և կապ չունի ընկերության հետ։ Ես                 պարզապես հետևում եմ «Վեոլիա Ջուր»-ի հանրային Telegram ալիքին և Ձեզ եմ ուղարկում                 միայն Ձեր հասցեին վերաբերող հայտարարությունները։ Ջրի, վթարների կամ հաշիվների                 հարցերով խնդրում ենք դիմել անմիջապես «Վեոլիա Ջուր»-ին։
+
                 Բաժանորդագրվեք Ձեզ հետաքրքրող փողոցի կամ թաղամասի անվանը, և ես կտեղեկացնեմ Ձեզ, \
                 երբ նոր հայտարարություն հայտնվի այդ հասցեի վերաբերյալ։ Կարող եք գրել լատինատառ \
                 կամ ռուսերեն տառերով՝ ես կփորձեմ վերածել հայերենի։
@@ -43,6 +45,8 @@ public final class Messages {
                 """
                 Hi! I send notifications about water outage announcements from Veolia Jur.
 
+                ℹ️ This is not an official Veolia Jur bot and is not affiliated with the                 company. I simply follow Veolia Jur's public Telegram channel and forward you                 only the announcements that concern your address. For questions about water                 supply, accidents or bills, please contact Veolia Jur directly.
+
                 Subscribe to a street or district name you care about, and I'll notify you \
                 whenever a new announcement mentions it. You can type it in English or Russian \
                 letters — I'll try to convert it to Armenian automatically.
@@ -56,6 +60,8 @@ public final class Messages {
                 /help — show help""",
                 """
                 Привет! Я отправляю уведомления об отключениях воды от «Veolia Jur».
+
+                ℹ️ Это не официальный бот «Veolia Jur», и он никак не связан с компанией. Я                 просто слежу за публичным Telegram-каналом «Veolia Jur» и пересылаю вам только                 те объявления, которые касаются вашего адреса. По вопросам водоснабжения, аварий                 или счетов обращайтесь напрямую в «Veolia Jur».
 
                 Подпишитесь на интересующую вас улицу или район, и я сообщу вам, как только \
                 появится новое объявление об этом адресе. Можно писать латиницей или \
