@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
+import org.telegram.telegrambots.meta.api.methods.description.SetMyDescription;
+import org.telegram.telegrambots.meta.api.methods.description.SetMyShortDescription;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChat;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
@@ -167,6 +169,34 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     public String getBotUsername() {
         String username = botProperties.username();
         return username == null || username.isBlank() ? "veolia_jur_notifier_bot" : username;
+    }
+
+    /**
+     * Sets the profile texts Telegram shows before the user presses Start and on the bot's
+     * profile, so people can tell up front that this isn't Veolia Jur's own bot. Armenian is
+     * the default (no language code); English and Russian override it for users whose Telegram
+     * app is in that language. Failures are only logged — a stale description isn't worth
+     * refusing to start over.
+     */
+    public void publishProfileDescriptions() {
+        publishProfileDescription(null, Language.HY);
+        publishProfileDescription("en", Language.EN);
+        publishProfileDescription("ru", Language.RU);
+    }
+
+    private void publishProfileDescription(String languageCode, Language lang) {
+        try {
+            execute(SetMyDescription.builder()
+                    .description(Messages.botDescription(lang))
+                    .languageCode(languageCode)
+                    .build());
+            execute(SetMyShortDescription.builder()
+                    .shortDescription(Messages.botShortDescription(lang))
+                    .languageCode(languageCode)
+                    .build());
+        } catch (TelegramApiException e) {
+            log.warn("Failed to set bot profile description for language {}: {}", lang, e.toString());
+        }
     }
 
     @Override

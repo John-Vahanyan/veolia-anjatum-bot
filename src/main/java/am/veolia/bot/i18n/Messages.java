@@ -29,7 +29,7 @@ public final class Messages {
                 Բարև ձեզ։ Ես ծանուցումներ եմ ուղարկում «Վեոլիա Ջուր» ընկերության ջրանջատումների \
                 մասին։
 
-                ℹ️ Սա «Վեոլիա Ջուր»-ի պաշտոնական բոտը չէ և կապ չունի ընկերության հետ։ Բոտը                 պարզապես հետևում է «Վեոլիա Ջուր»-ի հանրային Telegram ալիքին և Ձեզ է ուղարկում                 միայն Ձեր հասցեին վերաբերող հայտարարությունները։ Ջրի, վթարների կամ հաշիվների                 հարցերով խնդրում ենք դիմել անմիջապես «Վեոլիա Ջուր»-ին։
+                ℹ️ Սա «Վեոլիա Ջուր»-ի պաշտոնական բոտը չէ և կապ չունի ընկերության հետ։ Բոտը պարզապես հետևում է «Վեոլիա Ջուր»-ի հանրային Telegram ալիքին և Ձեզ է ուղարկում միայն Ձեր հասցեին վերաբերող հայտարարությունները։ Ջրի, վթարների կամ հաշիվների հարցերով խնդրում ենք դիմել անմիջապես «Վեոլիա Ջուր»-ին։
 
                 Բաժանորդագրվեք Ձեզ հետաքրքրող փողոցի կամ թաղամասի անվանը, և ես կտեղեկացնեմ Ձեզ, \
                 երբ նոր հայտարարություն հայտնվի այդ հասցեի վերաբերյալ։ Կարող եք գրել լատինատառ \
@@ -45,7 +45,7 @@ public final class Messages {
                 """
                 Hi! I send notifications about water outage announcements from Veolia Jur.
 
-                ℹ️ This is not an official Veolia Jur bot and is not affiliated with the                 company. The bot simply follows Veolia Jur's public Telegram channel and forwards you                 only the announcements that concern your address. For questions about water                 supply, accidents or bills, please contact Veolia Jur directly.
+                ℹ️ This is not an official Veolia Jur bot and is not affiliated with the company. The bot simply follows Veolia Jur's public Telegram channel and forwards you only the announcements that concern your address. For questions about water supply, accidents or bills, please contact Veolia Jur directly.
 
                 Subscribe to a street or district name you care about, and I'll notify you \
                 whenever a new announcement mentions it. You can type it in English or Russian \
@@ -61,7 +61,7 @@ public final class Messages {
                 """
                 Привет! Я отправляю уведомления об отключениях воды от «Veolia Jur».
 
-                ℹ️ Это не официальный бот «Veolia Jur», и он никак не связан с компанией. Бот                 просто следит за публичным Telegram-каналом «Veolia Jur» и пересылает вам только                 те объявления, которые касаются вашего адреса. По вопросам водоснабжения, аварий                 или счетов обращайтесь напрямую в «Veolia Jur».
+                ℹ️ Это не официальный бот «Veolia Jur», и он никак не связан с компанией. Бот просто следит за публичным Telegram-каналом «Veolia Jur» и пересылает вам только те объявления, которые касаются вашего адреса. По вопросам водоснабжения, аварий или счетов обращайтесь напрямую в «Veolia Jur».
 
                 Подпишитесь на интересующую вас улицу или район, и я сообщу вам, как только \
                 появится новое объявление об этом адресе. Можно писать латиницей или \
@@ -243,15 +243,15 @@ public final class Messages {
     public static String supportPrompt(Language lang) {
         return text(lang,
                 """
-                Գրեք Ձեր առաջարկը, կամ նկարագրեք սխալը, որը գտել եք բոտում։ Ձեր հաղորդագրությունը                 կփոխանցվի բոտի ստեղծողին։
+                Գրեք Ձեր առաջարկը, կամ նկարագրեք սխալը, որը գտել եք բոտում։ Ձեր հաղորդագրությունը կփոխանցվի բոտի ստեղծողին։
 
                 Չեղարկելու համար պարզապես օգտագործեք ներքևի կոճակները։""",
                 """
-                Please write your suggestion, or describe the bug you found in the bot. Your                 message will be passed on to the bot's developer.
+                Please write your suggestion, or describe the bug you found in the bot. Your message will be passed on to the bot's developer.
 
                 To cancel, just use the menu buttons below.""",
                 """
-                Напишите ваше предложение или опишите ошибку, которую вы нашли в боте. Ваше                 сообщение будет передано разработчику бота.
+                Напишите ваше предложение или опишите ошибку, которую вы нашли в боте. Ваше сообщение будет передано разработчику бота.
 
                 Чтобы отменить, просто используйте кнопки меню внизу.""");
     }
@@ -406,6 +406,43 @@ public final class Messages {
                 "Ընտրեք, թե որ բաժանորդագրությունը ցանկանում եք չեղարկել.",
                 "Select which subscription to remove:",
                 "Выберите, какую подписку удалить:");
+    }
+
+    /**
+     * The bot's profile description (Telegram's "What can this bot do?", shown in an empty chat
+     * before the user presses Start). Telegram caps it at 512 characters.
+     */
+    public static String botDescription(Language lang) {
+        return text(lang,
+                """
+                Այս բոտը Ձեզ տեղեկացնում է Ձեր փողոցում կամ թաղամասում «Վեոլիա Ջուր»-ի \
+                հայտարարած ջրանջատումների մասին։
+
+                Սա «Վեոլիա Ջուր»-ի պաշտոնական բոտը չէ և կապ չունի ընկերության հետ․ բոտը միայն \
+                կարդում է «Վեոլիա Ջուր»-ի հանրային Telegram ալիքը։ Ջրի, վթարների կամ հաշիվների \
+                հարցերով դիմեք անմիջապես «Վեոլիա Ջուր»-ին։""",
+                """
+                This bot notifies you about water outages announced by Veolia Jur for your \
+                street or district.
+
+                It is not an official Veolia Jur bot and is not affiliated with the company — \
+                the bot only reads Veolia Jur's public Telegram channel. For questions about \
+                water supply, accidents or bills, please contact Veolia Jur directly.""",
+                """
+                Этот бот уведомляет вас об отключениях воды на вашей улице или в вашем районе, \
+                объявленных «Veolia Jur».
+
+                Это не официальный бот «Veolia Jur», и он не связан с компанией — бот лишь \
+                читает публичный Telegram-канал «Veolia Jur». По вопросам водоснабжения, аварий \
+                или счетов обращайтесь напрямую в «Veolia Jur».""");
+    }
+
+    /** The bot's profile "About" line, also shown when the bot is shared. Telegram caps it at 120 characters. */
+    public static String botShortDescription(Language lang) {
+        return text(lang,
+                "Ծանուցումներ «Վեոլիա Ջուր»-ի ջրանջատումների մասին՝ Ձեր հասցեով։ Պաշտոնական բոտ չէ։",
+                "Alerts about Veolia Jur water outages at your address. Not an official Veolia Jur bot.",
+                "Уведомления об отключениях воды «Veolia Jur» по вашему адресу. Не официальный бот компании.");
     }
 
     private static String text(Language lang, String hy, String en, String ru) {

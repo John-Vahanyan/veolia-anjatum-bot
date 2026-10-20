@@ -31,6 +31,7 @@ public class TelegramBotRegistrar {
             TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
             telegramBotsApi.registerBot(bot);
             log.info("Telegram bot registered and long-polling started");
+            bot.publishProfileDescriptions();
         } catch (TelegramApiException e) {
             throw new IllegalStateException("Failed to register Telegram bot", e);
         }
