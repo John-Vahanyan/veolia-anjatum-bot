@@ -47,6 +47,32 @@ class SubscriptionRepositoryTest {
     }
 
     @Test
+    void adminCanCorrectStreetAndDistrictOfAScopedSubscription() {
+        repository.addScopedStreet(1L, "Աբովյն", "YEREVAN", "ARABKIR", true);
+        Subscription original = repository.findByKey(1L, "Աբովյն", "YEREVAN", "ARABKIR").orElseThrow();
+
+        assertThat(repository.updateStreetAndDistrict(original.id(), "Աբովյան", "KENTRON", false)).isTrue();
+
+        Subscription updated = repository.findById(original.id()).orElseThrow();
+        assertThat(updated.keyword()).isEqualTo("Աբովյան");
+        assertThat(updated.regionCode()).isEqualTo("YEREVAN");
+        assertThat(updated.districtCode()).isEqualTo("KENTRON");
+        assertThat(updated.type()).isEqualTo(SubscriptionType.SCOPED_STREET);
+        assertThat(updated.fuzzyMatch()).isFalse();
+    }
+
+    @Test
+    void correctionThatDuplicatesAnExistingSubscriptionIsRejectedAndLeavesTheRowAlone() {
+        repository.addScopedStreet(1L, "Աբովյան", "YEREVAN", "KENTRON", false);
+        repository.addScopedStreet(1L, "Աբովյն", "YEREVAN", "KENTRON", true);
+        Subscription typo = repository.findByKey(1L, "Աբովյն", "YEREVAN", "KENTRON").orElseThrow();
+
+        assertThat(repository.updateStreetAndDistrict(typo.id(), "Աբովյան", "KENTRON", false)).isFalse();
+
+        assertThat(repository.findById(typo.id()).orElseThrow().keyword()).isEqualTo("Աբովյն");
+    }
+
+    @Test
     void addAndFindRoundTripAnUnscopedKeyword() {
         assertThat(repository.add(1L, "Աբովյան", false)).isTrue();
 

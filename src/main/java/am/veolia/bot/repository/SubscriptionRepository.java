@@ -147,6 +147,29 @@ public class SubscriptionRepository {
         ).stream().findFirst();
     }
 
+    /** The row just inserted by one of the {@code add*} methods — they don't hand back the generated id themselves. */
+    public Optional<Subscription> findByKey(long userId, String keyword, String regionCode, String districtCode) {
+        return jdbcTemplate.query(
+                "SELECT id, user_id, keyword, region_code, district_code, subscription_type, fuzzy_match FROM subscriptions "
+                        + "WHERE user_id = ? AND keyword = ? AND region_code = ? AND district_code = ?",
+                SUBSCRIPTION_ROW_MAPPER,
+                userId, keyword, blankToEmpty(regionCode), blankToEmpty(districtCode)
+        ).stream().findFirst();
+    }
+
+    /**
+     * Admin correction of a scoped street subscription's street name and/or district. Returns
+     * false if the row is gone, or if the user already has a subscription identical to the
+     * corrected one (the UNIQUE constraint; {@code OR IGNORE} leaves the row untouched then).
+     * Deliberately not written to {@code subscription_events}: the user didn't do anything.
+     */
+    public boolean updateStreetAndDistrict(long id, String keyword, String districtCode, boolean fuzzyMatch) {
+        return jdbcTemplate.update(
+                "UPDATE OR IGNORE subscriptions SET keyword = ?, district_code = ?, fuzzy_match = ? WHERE id = ?",
+                keyword, blankToEmpty(districtCode), fuzzyMatch ? 1 : 0, id
+        ) > 0;
+    }
+
     /**
      * Appends to the permanent {@code subscription_events} audit trail. Unlike
      * {@code subscriptions} itself, these rows are never deleted — this is what

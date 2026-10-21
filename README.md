@@ -218,9 +218,19 @@ sensitive is hardcoded.
 
 ### Admin subscribe notifications
 
-Set `ADMIN_CHAT_ID` to get a message every time anyone subscribes:
-`🔔 Jon Doe (@jondoe, id 123456789) subscribed to: Kentron — Abovyan`. Leave
-it unset (the default) to disable this entirely.
+Set `ADMIN_CHAT_ID` to get a message every time anyone subscribes, in the
+admin chat's own chosen language:
+`🔔 New subscription / User: Jon Doe (@jondoe, id 123456789) / Address: Yerevan — Kentron — Abovyan`.
+Leave it unset (the default) to disable this entirely.
+
+For a typed street (not a "whole region/district" subscription) the
+notification carries an **✏️ Edit street** button — and, for Yerevan, an
+**🏙 Edit district** button — to fix a typo or a wrongly picked district.
+Every edit ends on a before/after confirmation with **✅ Yes, save**,
+**✏️ Edit street again**, **🏙 Edit district again** (Yerevan only) and
+**❌ Cancel**; street and district corrections accumulate, so both can be
+fixed and saved at once. Saving updates the subscription in the DB
+silently — the subscriber isn't notified.
 
 The same chat also receives whatever users send via `/support`:
 `💬 Support message from Jon Doe (@jondoe, id 123456789):` followed by their

@@ -360,6 +360,97 @@ public final class Messages {
                 "Этот ответ уже отправлен или отменён.");
     }
 
+    // ---- Admin-only: subscribe notifications and street/district corrections ----
+
+    public static String adminNewSubscription(Language lang, String user, String address) {
+        return text(lang,
+                "🔔 Նոր բաժանորդագրություն\nՕգտատեր՝ " + user + "\nՀասցե՝ " + address,
+                "🔔 New subscription\nUser: " + user + "\nAddress: " + address,
+                "🔔 Новая подписка\nПользователь: " + user + "\nАдрес: " + address);
+    }
+
+    public static String buttonAdminEditStreet(Language lang) {
+        return text(lang, "✏️ Խմբագրել փողոցը", "✏️ Edit street", "✏️ Изменить улицу");
+    }
+
+    public static String buttonAdminEditDistrict(Language lang) {
+        return text(lang, "🏙 Խմբագրել վարչական շրջանը", "🏙 Edit district", "🏙 Изменить район");
+    }
+
+    public static String buttonAdminEditStreetAgain(Language lang) {
+        return text(lang, "✏️ Կրկին խմբագրել փողոցը", "✏️ Edit street again", "✏️ Снова изменить улицу");
+    }
+
+    public static String buttonAdminEditDistrictAgain(Language lang) {
+        return text(lang, "🏙 Կրկին խմբագրել վարչական շրջանը", "🏙 Edit district again", "🏙 Снова изменить район");
+    }
+
+    public static String buttonAdminSave(Language lang) {
+        return text(lang, "✅ Այո, պահպանել", "✅ Yes, save", "✅ Да, сохранить");
+    }
+
+    public static String adminEditStreetPrompt(Language lang, String currentStreet) {
+        return text(lang,
+                "✏️ Գրեք փողոցի ճիշտ անվանումը։ Ներկայիս՝ «" + currentStreet + "»\n\n"
+                        + "Չեղարկելու համար օգտագործեք ցանկացած կոճակ կամ հրաման։",
+                "✏️ Type the correct street name. Current: \"" + currentStreet + "\"\n\n"
+                        + "To cancel, use any menu button or command.",
+                "✏️ Введите правильное название улицы. Сейчас: «" + currentStreet + "»\n\n"
+                        + "Чтобы отменить, используйте любую кнопку меню или команду.");
+    }
+
+    public static String adminEditDistrictPrompt(Language lang) {
+        return text(lang,
+                "🏙 Ընտրեք ճիշտ վարչական շրջանը։",
+                "🏙 Choose the correct district.",
+                "🏙 Выберите правильный район.");
+    }
+
+    public static String adminEditConfirm(Language lang, String user, String before, String after) {
+        return text(lang,
+                "Իսկապե՞ս պահպանել փոփոխությունը։ Օգտատերը չի ծանուցվի։\n\n"
+                        + "Օգտատեր՝ " + user + "\nԵղել է՝ " + before + "\nԿլինի՝ " + after,
+                "Do you really want to save this change? The user won't be notified.\n\n"
+                        + "User: " + user + "\nBefore: " + before + "\nAfter: " + after,
+                "Вы действительно хотите сохранить изменение? Пользователь не получит уведомления.\n\n"
+                        + "Пользователь: " + user + "\nБыло: " + before + "\nСтанет: " + after);
+    }
+
+    public static String adminEditSaved(Language lang, String after) {
+        return text(lang,
+                "✅ Պահպանվեց՝ " + after,
+                "✅ Saved: " + after,
+                "✅ Сохранено: " + after);
+    }
+
+    public static String adminEditDuplicate(Language lang) {
+        return text(lang,
+                "⚠️ Չպահպանվեց․ այս օգտատերն արդեն ունի նույն բաժանորդագրությունը։",
+                "⚠️ Not saved — this user already has exactly that subscription.",
+                "⚠️ Не сохранено — у этого пользователя уже есть точно такая подписка.");
+    }
+
+    public static String adminEditCancelled(Language lang) {
+        return text(lang,
+                "Չեղարկվեց․ ոչինչ չփոխվեց։",
+                "Cancelled — nothing was changed.",
+                "Отменено — ничего не изменено.");
+    }
+
+    public static String adminEditSubscriptionGone(Language lang) {
+        return text(lang,
+                "Այս բաժանորդագրությունն այլևս գոյություն չունի (հավանաբար օգտատերը չեղարկել է այն)։",
+                "This subscription no longer exists (the user probably removed it).",
+                "Этой подписки больше нет (вероятно, пользователь её удалил).");
+    }
+
+    public static String adminEditDraftGone(Language lang) {
+        return text(lang,
+                "Այս խմբագրումն արդեն պահպանվել կամ չեղարկվել է։ Սկսեք նորից ծանուցման կոճակից։",
+                "This edit was already saved or cancelled. Start again from the notification's button.",
+                "Это изменение уже сохранено или отменено. Начните заново с кнопки в уведомлении.");
+    }
+
     /** Heading above the admin's answer to a user's /support message. */
     public static String supportReplyHeader(Language lang) {
         return text(lang,

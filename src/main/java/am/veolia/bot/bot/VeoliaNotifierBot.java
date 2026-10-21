@@ -88,8 +88,20 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     private static final String SUPPORT_SEND_CALLBACK_PREFIX = "supsend:";
     private static final String SUPPORT_CANCEL_CALLBACK_PREFIX = "supcancel:";
 
+    // Admin-only: correcting a subscriber's street/district. The first two carry a subscription
+    // id (buttons under the subscribe notification); the rest carry an AdminEditDraft id.
+    // "ae…:" — again no prefix here is a string-prefix of another.
+    private static final String ADMIN_EDIT_STREET_CALLBACK_PREFIX = "aestreet:";
+    private static final String ADMIN_EDIT_DISTRICT_CALLBACK_PREFIX = "aedistrict:";
+    private static final String ADMIN_EDIT_STREET_AGAIN_CALLBACK_PREFIX = "aestreet2:";
+    private static final String ADMIN_EDIT_DISTRICT_AGAIN_CALLBACK_PREFIX = "aedistrict2:";
+    private static final String ADMIN_PICK_DISTRICT_CALLBACK_PREFIX = "aepick:";
+    private static final String ADMIN_EDIT_SAVE_CALLBACK_PREFIX = "aesave:";
+    private static final String ADMIN_EDIT_CANCEL_CALLBACK_PREFIX = "aecancel:";
+
     /** What we're expecting a chat's *next* plain-text message to mean, if anything. */
-    private sealed interface PendingAction permits PendingStreetEntry, PendingSupportMessage, PendingAdminReply {
+    private sealed interface PendingAction
+            permits PendingStreetEntry, PendingSupportMessage, PendingAdminReply, PendingAdminStreetEdit {
     }
 
     /**
@@ -109,6 +121,18 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
 
     /** The admin tapped "Reply" under a support message; their next text is the answer to {@code targetChatId}. */
     private record PendingAdminReply(long targetChatId) implements PendingAction {
+    }
+
+    /** The admin is correcting a subscriber's street; their next text is the new name for draft {@code draftId}. */
+    private record PendingAdminStreetEdit(long draftId) implements PendingAction {
+    }
+
+    /**
+     * An admin correction in progress for subscription {@code subscriptionId}. A null field means
+     * "leave as is"; {@code keyword} is already transliterated to Armenian, and
+     * {@code keywordFuzzy} records whether that was needed (see {@link Subscription#fuzzyMatch()}).
+     */
+    private record AdminEditDraft(long subscriptionId, String keyword, boolean keywordFuzzy, String districtCode) {
     }
 
     /** An admin reply typed and awaiting the "Send" / "Cancel" confirmation — see {@link #handleAdminReplyText}. */
@@ -153,6 +177,10 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
      */
     private final Map<Long, AdminReplyDraft> adminReplyDrafts = new ConcurrentHashMap<>();
     private final AtomicLong nextAdminReplyDraftId = new AtomicLong();
+
+    /** Admin street/district corrections not yet saved — same in-memory, id-in-callback scheme as {@link #adminReplyDrafts}. */
+    private final Map<Long, AdminEditDraft> adminEditDrafts = new ConcurrentHashMap<>();
+    private final AtomicLong nextAdminEditDraftId = new AtomicLong();
 
     public VeoliaNotifierBot(BotProperties botProperties,
                               UserRepository userRepository,
@@ -275,6 +303,10 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             handleAdminReplyText(chatId, reply.targetChatId(), text);
             return;
         }
+        if (pending instanceof PendingAdminStreetEdit edit && isAdmin(chatId)) {
+            handleAdminStreetText(chatId, edit.draftId(), text);
+            return;
+        }
 
         send(chatId, Messages.unknownCommand(lang));
     }
@@ -374,6 +406,22 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             handleAdminReplyConfirmed(chatId, data.substring(SUPPORT_SEND_CALLBACK_PREFIX.length()));
         } else if (data != null && data.startsWith(SUPPORT_CANCEL_CALLBACK_PREFIX) && isAdmin(chatId)) {
             handleAdminReplyCancelled(chatId, data.substring(SUPPORT_CANCEL_CALLBACK_PREFIX.length()));
+        } else if (data != null && data.startsWith(ADMIN_EDIT_STREET_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            startAdminEdit(chatId, data.substring(ADMIN_EDIT_STREET_CALLBACK_PREFIX.length()), false);
+        } else if (data != null && data.startsWith(ADMIN_EDIT_DISTRICT_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            startAdminEdit(chatId, data.substring(ADMIN_EDIT_DISTRICT_CALLBACK_PREFIX.length()), true);
+        } else if (data != null && data.startsWith(ADMIN_EDIT_STREET_AGAIN_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            parseLong(data.substring(ADMIN_EDIT_STREET_AGAIN_CALLBACK_PREFIX.length()))
+                    .ifPresent(draftId -> promptAdminEditStreet(chatId, draftId));
+        } else if (data != null && data.startsWith(ADMIN_EDIT_DISTRICT_AGAIN_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            parseLong(data.substring(ADMIN_EDIT_DISTRICT_AGAIN_CALLBACK_PREFIX.length()))
+                    .ifPresent(draftId -> promptAdminEditDistrict(chatId, draftId));
+        } else if (data != null && data.startsWith(ADMIN_PICK_DISTRICT_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            handleAdminDistrictPicked(chatId, data.substring(ADMIN_PICK_DISTRICT_CALLBACK_PREFIX.length()));
+        } else if (data != null && data.startsWith(ADMIN_EDIT_SAVE_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            handleAdminEditSave(chatId, data.substring(ADMIN_EDIT_SAVE_CALLBACK_PREFIX.length()));
+        } else if (data != null && data.startsWith(ADMIN_EDIT_CANCEL_CALLBACK_PREFIX) && isAdmin(chatId)) {
+            handleAdminEditCancel(chatId, data.substring(ADMIN_EDIT_CANCEL_CALLBACK_PREFIX.length()));
         }
         answerCallback(callbackQuery.getId());
     }
@@ -426,7 +474,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         boolean added = subscriptionRepository.addWholeScope(chatId, region.armenian(), region.name(), "");
         if (added) {
             log.info("chat {} subscribed to whole region {}", chatId, region.name());
-            notifyAdminOfSubscription(from, display + " — " + Messages.allLabel(Language.EN));
+            notifyAdminOfSubscription(from, chatId, region.armenian(), region.name(), "");
         }
         send(chatId, added ? Messages.subscribedWholeScope(lang, display) : Messages.alreadySubscribedWholeScope(lang, display));
     }
@@ -467,8 +515,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         boolean added = subscriptionRepository.addWholeScope(chatId, district.armenian(), Region.YEREVAN.name(), district.name());
         if (added) {
             log.info("chat {} subscribed to whole district {}", chatId, district.name());
-            notifyAdminOfSubscription(from,
-                    Region.YEREVAN.displayName(Language.EN) + " — " + display + " — " + Messages.allLabel(Language.EN));
+            notifyAdminOfSubscription(from, chatId, district.armenian(), Region.YEREVAN.name(), district.name());
         }
         send(chatId, added ? Messages.subscribedWholeScope(lang, display) : Messages.alreadySubscribedWholeScope(lang, display));
     }
@@ -612,7 +659,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
         if (added) {
             log.info("chat {} subscribed to \"{}\"{}", chatId, keyword,
                     wasTransliterated ? " (transliterated from \"" + typed + "\")" : "");
-            notifyAdminOfSubscription(from, keyword);
+            notifyAdminOfSubscription(from, chatId, keyword, "", "");
         }
 
         if (!added) {
@@ -642,7 +689,7 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
             log.info("chat {} subscribed to \"{}\" scoped to region={} district={}{}",
                     chatId, keyword, regionCode, districtCode,
                     wasTransliterated ? " (transliterated from \"" + typed + "\")" : "");
-            notifyAdminOfSubscription(from, scopeDisplay + " — " + keyword);
+            notifyAdminOfSubscription(from, chatId, keyword, regionCode, districtCode);
         }
 
         if (!added) {
@@ -940,16 +987,218 @@ public class VeoliaNotifierBot extends TelegramLongPollingBot {
     }
 
     /**
-     * Notifies {@link #adminChatId} (if configured) that {@code subscriber} just added
-     * {@code subscriptionDescription}. A no-op — cheaply, before doing any formatting — when
-     * no admin chat id is configured, so this is safe to call unconditionally on every
-     * successful subscribe.
+     * Notifies {@link #adminChatId} (if configured) that {@code subscriber} just added the
+     * subscription identified by the other arguments. A no-op — cheaply, before touching the
+     * DB — when no admin chat id is configured, so this is safe to call unconditionally on every
+     * successful subscribe. A typed street (not "whole region/district") also gets buttons to
+     * correct it — see {@link #startAdminEdit}.
      */
-    private void notifyAdminOfSubscription(User subscriber, String subscriptionDescription) {
+    private void notifyAdminOfSubscription(User subscriber, long chatId, String keyword, String regionCode,
+                                           String districtCode) {
         if (adminChatId == null) {
             return;
         }
-        send(adminChatId, "🔔 " + describeUser(subscriber) + " subscribed to: " + subscriptionDescription);
+        Optional<Subscription> subscription = subscriptionRepository.findByKey(chatId, keyword, regionCode, districtCode);
+        if (subscription.isEmpty()) {
+            return;
+        }
+        Subscription sub = subscription.get();
+        Language adminLang = currentLanguage(adminChatId);
+        String text = Messages.adminNewSubscription(adminLang, describeUser(subscriber), describeSubscription(sub, adminLang));
+        if (sub.type() != SubscriptionType.SCOPED_STREET) {
+            send(adminChatId, text);
+            return;
+        }
+        List<InlineKeyboardButton> buttons = new ArrayList<>();
+        buttons.add(InlineKeyboardButton.builder()
+                .text(Messages.buttonAdminEditStreet(adminLang))
+                .callbackData(ADMIN_EDIT_STREET_CALLBACK_PREFIX + sub.id())
+                .build());
+        if (sub.region() == Region.YEREVAN) {
+            buttons.add(InlineKeyboardButton.builder()
+                    .text(Messages.buttonAdminEditDistrict(adminLang))
+                    .callbackData(ADMIN_EDIT_DISTRICT_CALLBACK_PREFIX + sub.id())
+                    .build());
+        }
+        send(adminChatId, text, InlineKeyboardMarkup.builder().keyboardRow(buttons).build());
+    }
+
+    // ---- Admin corrections to a user's street/district ------------------------
+
+    /**
+     * Either button under a subscribe notification opens a fresh draft from the row as it is
+     * now, then goes straight into that edit. Street and district corrections accumulate on the
+     * same draft, so both can be fixed and saved together.
+     */
+    private void startAdminEdit(long adminChat, String subscriptionIdRaw, boolean district) {
+        Optional<Subscription> subscription = parseLong(subscriptionIdRaw).flatMap(subscriptionRepository::findById);
+        Language adminLang = currentLanguage(adminChat);
+        if (subscription.isEmpty()) {
+            send(adminChat, Messages.adminEditSubscriptionGone(adminLang));
+            return;
+        }
+        long draftId = nextAdminEditDraftId.incrementAndGet();
+        adminEditDrafts.put(draftId, new AdminEditDraft(subscription.get().id(), null, false, null));
+        if (district) {
+            promptAdminEditDistrict(adminChat, draftId);
+        } else {
+            promptAdminEditStreet(adminChat, draftId);
+        }
+    }
+
+    private void promptAdminEditStreet(long adminChat, long draftId) {
+        AdminEditDraft draft = adminEditDrafts.get(draftId);
+        Language adminLang = currentLanguage(adminChat);
+        if (draft == null) {
+            send(adminChat, Messages.adminEditDraftGone(adminLang));
+            return;
+        }
+        Optional<Subscription> current = subscriptionRepository.findById(draft.subscriptionId());
+        if (current.isEmpty()) {
+            adminEditDrafts.remove(draftId);
+            send(adminChat, Messages.adminEditSubscriptionGone(adminLang));
+            return;
+        }
+        pendingActions.put(adminChat, new PendingAdminStreetEdit(draftId));
+        String street = draft.keyword() != null ? draft.keyword() : current.get().keyword();
+        send(adminChat, Messages.adminEditStreetPrompt(adminLang, street));
+    }
+
+    private void promptAdminEditDistrict(long adminChat, long draftId) {
+        Language adminLang = currentLanguage(adminChat);
+        if (!adminEditDrafts.containsKey(draftId)) {
+            send(adminChat, Messages.adminEditDraftGone(adminLang));
+            return;
+        }
+        InlineKeyboardMarkup.InlineKeyboardMarkupBuilder builder = InlineKeyboardMarkup.builder();
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        for (District district : District.values()) {
+            row.add(InlineKeyboardButton.builder()
+                    .text(district.displayName(adminLang))
+                    .callbackData(ADMIN_PICK_DISTRICT_CALLBACK_PREFIX + draftId + ":" + district.name())
+                    .build());
+            if (row.size() == 2) {
+                builder.keyboardRow(List.copyOf(row));
+                row.clear();
+            }
+        }
+        if (!row.isEmpty()) {
+            builder.keyboardRow(List.copyOf(row));
+        }
+        builder.keyboardRow(List.of(InlineKeyboardButton.builder()
+                .text(Messages.buttonAdminReplyCancel(adminLang))
+                .callbackData(ADMIN_EDIT_CANCEL_CALLBACK_PREFIX + draftId)
+                .build()));
+        send(adminChat, Messages.adminEditDistrictPrompt(adminLang), builder.build());
+    }
+
+    /** The admin typed a corrected street name. Transliterated like a user's own entry would be. */
+    private void handleAdminStreetText(long adminChat, long draftId, String text) {
+        AdminEditDraft draft = adminEditDrafts.get(draftId);
+        if (draft == null) {
+            send(adminChat, Messages.adminEditDraftGone(currentLanguage(adminChat)));
+            return;
+        }
+        String keyword = Transliterator.toArmenianBestEffort(text);
+        adminEditDrafts.put(draftId, new AdminEditDraft(draft.subscriptionId(), keyword, !keyword.equals(text),
+                draft.districtCode()));
+        sendAdminEditConfirmation(adminChat, draftId);
+    }
+
+    /** Callback data is {@code <draftId>:<DISTRICT>}. */
+    private void handleAdminDistrictPicked(long adminChat, String payload) {
+        int colon = payload.indexOf(':');
+        District district = colon < 0 ? null : District.fromCode(payload.substring(colon + 1));
+        Optional<Long> draftId = colon < 0 ? Optional.empty() : parseLong(payload.substring(0, colon));
+        AdminEditDraft draft = draftId.map(adminEditDrafts::get).orElse(null);
+        if (draft == null || district == null) {
+            send(adminChat, Messages.adminEditDraftGone(currentLanguage(adminChat)));
+            return;
+        }
+        adminEditDrafts.put(draftId.get(), new AdminEditDraft(draft.subscriptionId(), draft.keyword(), draft.keywordFuzzy(), district.name()));
+        sendAdminEditConfirmation(adminChat, draftId.get());
+    }
+
+    /** "Before → after" with Save / edit street again / edit district again (Yerevan only) / Cancel. */
+    private void sendAdminEditConfirmation(long adminChat, long draftId) {
+        Language adminLang = currentLanguage(adminChat);
+        AdminEditDraft draft = adminEditDrafts.get(draftId);
+        Optional<Subscription> current = draft == null ? Optional.empty() : subscriptionRepository.findById(draft.subscriptionId());
+        if (current.isEmpty()) {
+            adminEditDrafts.remove(draftId);
+            send(adminChat, Messages.adminEditSubscriptionGone(adminLang));
+            return;
+        }
+        Subscription before = current.get();
+        Subscription after = applyDraft(before, draft);
+
+        InlineKeyboardMarkup.InlineKeyboardMarkupBuilder markup = InlineKeyboardMarkup.builder()
+                .keyboardRow(List.of(InlineKeyboardButton.builder()
+                        .text(Messages.buttonAdminSave(adminLang))
+                        .callbackData(ADMIN_EDIT_SAVE_CALLBACK_PREFIX + draftId)
+                        .build()))
+                .keyboardRow(List.of(InlineKeyboardButton.builder()
+                        .text(Messages.buttonAdminEditStreetAgain(adminLang))
+                        .callbackData(ADMIN_EDIT_STREET_AGAIN_CALLBACK_PREFIX + draftId)
+                        .build()));
+        if (before.region() == Region.YEREVAN) {
+            markup.keyboardRow(List.of(InlineKeyboardButton.builder()
+                    .text(Messages.buttonAdminEditDistrictAgain(adminLang))
+                    .callbackData(ADMIN_EDIT_DISTRICT_AGAIN_CALLBACK_PREFIX + draftId)
+                    .build()));
+        }
+        markup.keyboardRow(List.of(InlineKeyboardButton.builder()
+                .text(Messages.buttonAdminReplyCancel(adminLang))
+                .callbackData(ADMIN_EDIT_CANCEL_CALLBACK_PREFIX + draftId)
+                .build()));
+
+        send(adminChat, Messages.adminEditConfirm(adminLang, describeChat(before.userId()),
+                describeSubscription(before, adminLang), describeSubscription(after, adminLang)), markup.build());
+    }
+
+    private static Subscription applyDraft(Subscription sub, AdminEditDraft draft) {
+        String keyword = draft.keyword() != null ? draft.keyword() : sub.keyword();
+        String districtCode = draft.districtCode() != null ? draft.districtCode() : sub.districtCode();
+        boolean fuzzy = draft.keyword() != null ? draft.keywordFuzzy() : sub.fuzzyMatch();
+        return new Subscription(sub.id(), sub.userId(), keyword, sub.regionCode(), districtCode, sub.type(), fuzzy);
+    }
+
+    /** Writes the draft to the DB. The subscriber is deliberately not told. */
+    private void handleAdminEditSave(long adminChat, String draftIdRaw) {
+        Language adminLang = currentLanguage(adminChat);
+        AdminEditDraft draft = parseLong(draftIdRaw).map(adminEditDrafts::remove).orElse(null);
+        if (draft == null) {
+            send(adminChat, Messages.adminEditDraftGone(adminLang));
+            return;
+        }
+        Optional<Subscription> current = subscriptionRepository.findById(draft.subscriptionId());
+        if (current.isEmpty()) {
+            send(adminChat, Messages.adminEditSubscriptionGone(adminLang));
+            return;
+        }
+        Subscription before = current.get();
+        Subscription after = applyDraft(before, draft);
+        boolean saved = subscriptionRepository.updateStreetAndDistrict(
+                after.id(), after.keyword(), after.districtCode(), after.fuzzyMatch());
+        log.info("admin edit of subscription {} (chat {}): \"{}\"/{} -> \"{}\"/{}{}", before.id(), before.userId(),
+                before.keyword(), before.districtCode(), after.keyword(), after.districtCode(), saved ? "" : " NOT SAVED");
+        send(adminChat, saved
+                ? Messages.adminEditSaved(adminLang, describeSubscription(after, adminLang))
+                : Messages.adminEditDuplicate(adminLang));
+    }
+
+    private void handleAdminEditCancel(long adminChat, String draftIdRaw) {
+        Language adminLang = currentLanguage(adminChat);
+        boolean existed = parseLong(draftIdRaw).map(adminEditDrafts::remove).isPresent();
+        send(adminChat, existed ? Messages.adminEditCancelled(adminLang) : Messages.adminEditDraftGone(adminLang));
+    }
+
+    private static Optional<Long> parseLong(String raw) {
+        try {
+            return Optional.of(Long.parseLong(raw));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     /** "First Last (@username, id 123)" — as much of that as Telegram actually gave us. */
