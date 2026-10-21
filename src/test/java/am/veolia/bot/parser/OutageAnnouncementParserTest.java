@@ -86,6 +86,60 @@ class OutageAnnouncementParserTest {
         assertThat(result.get().streets()).containsExactly("Կոմիտասի պողոտա 40");
     }
 
+    /** The real multi-area, two-day post from 2026-10-21 that the old parser skipped. */
+    static final String MULTI_AREA_POST = """
+            Վթարային ջրանջատում Երևանում, Կոտայքի և Արագածոտնի մարզերում հոկտեմբերի 21/22-ին
+
+            «Վեոլիա Ջուր» ընկերությունը տեղեկացնում է իր հաճախորդներին և սպառողներին, որ վթարի վերացման աշխատանքներով պայմանավորված, ս.թ. հոկտեմբերի 21-ին ժամը 11:00-ից մինչև հոկտեմբերի 22-ը ժամը 11:00-ն կդադարեցվի հետևյալ տարածքների ջրամատակարարումը.
+            Դավթաշեն վարչական շրջանը՝ ամբողջությամբ,
+            Աջափնյակ վարչական շրջանի՝ Նազարբեկյան, Նորաշեն, Գ-1 թաղամասերի, Ալիխանյան Եղբայրների,Մարգարյան, Ֆուչիկի, Բաշինջաղյան, Ջանիբեկյան, Շիրազի, Մազմանյան փողոցները իրենց նրբանցքներով, Հալաբյան 22-38 համարները իրենց կոտորակներով,
+            Կոտայքի մարզի՝ Զովունի գյուղի 21-37 փողոցների, Պռոշյան, Քասախ գյուղերի, Եղվարդ քաղաքի,
+            Արագածոտնի մարզի՝ Նոր Երզնկա, Սաղմոսավան, Ուշի գյուղերի:
+
+            Ընկերությունը հայցում է սպառողների ներողամտությունը պատճառված անհանգստության և կանխավ շնորհակալություն հայտնում ըմբռնման համար:""";
+
+    @Test
+    void parsesAMultiAreaTwoDayPostIntoOneAreaPerLine() {
+        Optional<OutageAnnouncement> result = parser.parse(new ChannelPost("VeoliaJur/2000", MULTI_AREA_POST));
+
+        assertThat(result).isPresent();
+        OutageAnnouncement announcement = result.get();
+        assertThat(announcement.date()).isEqualTo("հոկտեմբերի 21/22");
+        assertThat(announcement.startTime()).isEqualTo("11:00");
+        assertThat(announcement.endTime()).isEqualTo("11:00");
+        assertThat(announcement.areas()).extracting(OutageAnnouncement.Area::scope).containsExactly(
+                "Դավթաշեն վարչական շրջանը",
+                "Աջափնյակ վարչական շրջանի",
+                "Կոտայքի մարզի",
+                "Արագածոտնի մարզի");
+        assertThat(announcement.areas()).extracting(OutageAnnouncement.Area::whole)
+                .containsExactly(true, false, false, false);
+        assertThat(announcement.areas().get(1).streets())
+                .contains("Նազարբեկյան", "Ալիխանյան Եղբայրների", "Մարգարյան", "Հալաբյան 22-38 համարները իրենց կոտորակներով");
+        assertThat(announcement.areas().get(2).streets())
+                .containsExactly("Զովունի գյուղի 21-37 փողոցների", "Պռոշյան", "Քասախ գյուղերի", "Եղվարդ քաղաքի");
+        assertThat(announcement.areas().get(3).streets()).containsExactly("Նոր Երզնկա", "Սաղմոսավան", "Ուշի գյուղերի");
+        assertThat(announcement.streets()).doesNotContain("Ընկերությունը հայցում է սպառողների ներողամտությունը");
+    }
+
+    @Test
+    void anAreaLineWithoutARegionNameKeepsTheTitleInItsScope() {
+        String text = """
+                Վթարային ջրանջատում Կոտայքի մարզում մայիսի 4-ին
+
+                «Վեոլիա Ջուր» ընկերությունը տեղեկացնում է, որ ս.թ. մայիսի 4-ին ժամը 10:00-18:00-ն կդադարեցվի
+                հետևյալ տարածքների ջրամատակարարումը.
+                Զովունի գյուղի՝ 1-5 փողոցներ,
+                Եղվարդ քաղաքի՝ Երևանյան փողոց:""";
+
+        OutageAnnouncement announcement = parser.parse(new ChannelPost("VeoliaJur/2001", text)).orElseThrow();
+
+        assertThat(announcement.areas()).extracting(OutageAnnouncement.Area::scope).containsExactly(
+                "Զովունի գյուղի Կոտայքի մարզում",
+                "Եղվարդ քաղաքի Կոտայքի մարզում");
+        assertThat(announcement.endTime()).isEqualTo("18:00");
+    }
+
     @Test
     void skipsUnrelatedPostsRatherThanThrowing() {
         ChannelPost post = new ChannelPost("VeoliaJur/1005", "Շնորհավոր Նոր տարի բոլորիդ:");

@@ -176,4 +176,44 @@ class KeywordMatcherTest {
 
         assertThat(matcher.matchesScoped("Շենգավիլ", "Մանթաշյան", a, true)).isFalse();
     }
+
+    // ---- Multi-area posts ----
+
+    private OutageAnnouncement multiAreaPost() {
+        return new OutageAnnouncementParser()
+                .parse(new am.veolia.bot.model.ChannelPost("VeoliaJur/2000", OutageAnnouncementParserTest.MULTI_AREA_POST))
+                .orElseThrow();
+    }
+
+    @Test
+    void multiAreaPostMatchesAStreetUnderItsOwnArea() {
+        OutageAnnouncement a = multiAreaPost();
+        assertThat(matcher.matchesScoped("Աջափնյակ", "Մարգարյան", a, false)).isTrue();
+        assertThat(matcher.matchesScoped("Կոտայք", "Եղվարդ", a, false)).isTrue();
+        assertThat(matcher.matchesScoped("Արագածոտն", "Սաղմոսավան", a, false)).isTrue();
+    }
+
+    @Test
+    void multiAreaPostDoesNotMatchAStreetListedUnderAnotherArea() {
+        OutageAnnouncement a = multiAreaPost();
+        // Եղվարդ is listed under Kotayk, not Aragatsotn; Մարգարյան under Ajapnyak, not Kentron.
+        assertThat(matcher.matchesScoped("Արագածոտն", "Եղվարդ", a, false)).isFalse();
+        assertThat(matcher.matchesScoped("Կենտրոն", "Մարգարյան", a, false)).isFalse();
+    }
+
+    @Test
+    void multiAreaPostMatchesAnyStreetInAnAreaAffectedAsAWhole() {
+        // "Դավթաշեն վարչական շրջանը՝ ամբողջությամբ" — every Davtashen street is out.
+        assertThat(matcher.matchesScoped("Դավթաշեն", "Սասունցի Դավթի", multiAreaPost(), false)).isTrue();
+    }
+
+    @Test
+    void multiAreaPostMatchesWholeRegionAndDistrictSubscriptions() {
+        OutageAnnouncement a = multiAreaPost();
+        assertThat(matcher.matches("Դավթաշեն", a, false)).isTrue();
+        assertThat(matcher.matches("Աջափնյակ", a, false)).isTrue();
+        assertThat(matcher.matches("Կոտայք", a, false)).isTrue();
+        assertThat(matcher.matches("Արագածոտն", a, false)).isTrue();
+        assertThat(matcher.matches("Շենգավիթ", a, false)).isFalse();
+    }
 }

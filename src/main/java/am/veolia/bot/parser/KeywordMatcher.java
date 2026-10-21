@@ -104,9 +104,9 @@ public class KeywordMatcher {
     }
 
     /**
-     * True if the announcement is both in {@code scopeArmenianName}'s region/district (its
-     * district fragment matches) <em>and</em> some street fragment matches {@code streetKeyword}
-     * (fuzzily iff {@code allowFuzzyForStreet}). Requiring both stops a street subscription
+     * True if some area of the announcement is both in {@code scopeArmenianName}'s
+     * region/district (its scope matches) <em>and</em> either is affected as a whole or has a
+     * street fragment matching {@code streetKeyword} (fuzzily iff {@code allowFuzzyForStreet}). Requiring both stops a street subscription
      * from firing on a similarly-spelled street in a completely different part of the country —
      * the failure mode that plain, unscoped fuzzy matching had.
      *
@@ -116,8 +116,17 @@ public class KeywordMatcher {
      */
     public boolean matchesScoped(String scopeArmenianName, String streetKeyword, OutageAnnouncement announcement,
                                   boolean allowFuzzyForStreet) {
-        return matchesAny(scopeArmenianName, List.of(announcement.district()), false)
-                && matchesAny(streetKeyword, announcement.streets(), allowFuzzyForStreet);
+        // Checked per area, so in a post covering several areas a street only counts when it's
+        // listed under the subscriber's own area — not when the same name appears under another.
+        for (OutageAnnouncement.Area area : announcement.areas()) {
+            if (!matchesAny(scopeArmenianName, List.of(area.scope()), false)) {
+                continue;
+            }
+            if (area.whole() || matchesAny(streetKeyword, area.streets(), allowFuzzyForStreet)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Trims, collapses whitespace, strips common punctuation, and lower-cases for comparison. */
