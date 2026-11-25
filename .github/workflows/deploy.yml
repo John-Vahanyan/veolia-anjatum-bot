@@ -46,6 +46,13 @@ jobs:
           ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             'mv /opt/veolia-bot/veolia-jur-bot.jar.new /opt/veolia-bot/veolia-jur-bot.jar'
 
+      - name: Upload the subscribers script
+        run: |
+          scp deploy/subscribers.py \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/veolia-bot/subscribers.py.new"
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'chmod 755 /opt/veolia-bot/subscribers.py.new && mv /opt/veolia-bot/subscribers.py.new /opt/veolia-bot/subscribers.py'
+
       - name: Restart the service
         run: |
           ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '

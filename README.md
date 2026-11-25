@@ -404,6 +404,24 @@ steps from above.
 From then on, every push to `main` deploys automatically; you can also
 trigger a deploy manually from the Actions tab (`workflow_dispatch`).
 
+### Listing subscribers
+
+[`deploy/subscribers.py`](deploy/subscribers.py) lists who is subscribed to which
+addresses, with Telegram usernames. Every deploy copies it to the droplet:
+
+```bash
+sudo -u veolia-bot /opt/veolia-bot/subscribers.py                       # everyone
+sudo -u veolia-bot /opt/veolia-bot/subscribers.py --district kentron
+sudo -u veolia-bot /opt/veolia-bot/subscribers.py --region lori --type area
+sudo -u veolia-bot /opt/veolia-bot/subscribers.py --user @someone --since 2026-11-01
+sudo -u veolia-bot /opt/veolia-bot/subscribers.py --help                # all filters
+```
+
+Run it as `veolia-bot`, not as root: the file is writable by the CI `deploy`
+account, which should never be able to get code run as root. It opens the
+database read-only. Names aren't stored, so they're looked up through Telegram
+(`--no-names` skips that).
+
 ## Out of scope for this version
 
 - No web UI/dashboard — bot-only interaction.
